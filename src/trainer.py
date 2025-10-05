@@ -1,3 +1,7 @@
+"""Entrenamiento y evaluacion del modelo de reconocimiento de caracteres."""
+
+from __future__ import annotations
+
 import argparse
 import pickle
 from pathlib import Path
@@ -13,6 +17,7 @@ from src.scripts.generar_imagenes_sinteticas import generar_imagenes_sinteticas
 
 
 def _asegurar_datos() -> Tuple[int, int]:
+    """Verificar que existan datos en ``data/raw`` y generarlos si es necesario."""
     ruta_raw = Path(PATHS['datos_crudos'])
     ruta_raw.mkdir(parents=True, exist_ok=True)
 
@@ -27,27 +32,29 @@ def _asegurar_datos() -> Tuple[int, int]:
             total_imagenes += len(imagenes)
 
     if total_imagenes == 0:
-        print("data/raw esta vacio. Generando imagenes sinteticas...")
+        print('data/raw esta vacio. Generando imagenes sinteticas...')
         generar_imagenes_sinteticas()
         return _asegurar_datos()
 
-    print(f"data/raw contiene {total_imagenes} imagenes en {carpetas_con_imagenes} carpetas.")
+    print(f'data/raw contiene {total_imagenes} imagenes en {carpetas_con_imagenes} carpetas.')
     return total_imagenes, carpetas_con_imagenes
 
 
 def _one_hot(labels: np.ndarray, num_clases: int) -> np.ndarray:
+    """Codificar un vector de etiquetas en formato one-hot."""
     one_hot = np.zeros((labels.shape[0], num_clases), dtype=np.float32)
     one_hot[np.arange(labels.shape[0]), labels] = 1.0
     return one_hot
 
 
 def preparar_datos(aplicar_augmentacion: bool = True) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Cargar datos desde disco y devolver particiones train/val/test."""
     _asegurar_datos()
     loader = DataLoader(ruta_datos=PATHS['datos_crudos'], mapa_etiquetas=DEFAULT_LABEL_MAP)
     loader.cargar_desde_directorio()
 
     if len(loader.imagenes) == 0:
-        raise RuntimeError("No se pudieron cargar imagenes despues de generar datos sinteticos.")
+        raise RuntimeError('No se pudieron cargar imagenes despues de generar datos sinteticos.')
 
     loader.preprocesar_imagenes()
     X_train, X_val, X_test, y_train, y_val, y_test = loader.dividir_datos()
@@ -63,6 +70,7 @@ def preparar_datos(aplicar_augmentacion: bool = True) -> Tuple[np.ndarray, np.nd
 
 
 def _construir_modelo(input_dim: int, num_clases: int) -> NeuralNetwork:
+    """Instanciar ``NeuralNetwork`` con los parametros del archivo de configuracion."""
     capas_config = NETWORK_CONFIG.get('capas')
     if capas_config:
         capas = list(capas_config)
@@ -73,7 +81,7 @@ def _construir_modelo(input_dim: int, num_clases: int) -> NeuralNetwork:
 
     activaciones = NETWORK_CONFIG.get('activaciones')
     if activaciones and len(activaciones) != len(capas) - 1:
-        raise ValueError("La lista de activaciones no coincide con la cantidad de capas - 1")
+        raise ValueError('La lista de activaciones no coincide con la cantidad de capas - 1')
 
     return NeuralNetwork(
         capas=capas,
@@ -89,13 +97,15 @@ def _construir_modelo(input_dim: int, num_clases: int) -> NeuralNetwork:
 
 
 def _evaluar(modelo: NeuralNetwork, X: np.ndarray, y_true_oh: np.ndarray) -> Dict[str, float]:
+    """Calcular loss y accuracy de ``modelo`` en el conjunto provisto."""
     y_prob = modelo.predecir_probabilidades(X)
     precision = NeuralNetwork.calcular_precision(y_true_oh, y_prob)
-    perdida = modelo._calcular_perdida(y_true_oh, y_prob)  # pylint: disable=protected-access
-    return {"loss": float(perdida), "accuracy": float(precision)}
+    perdida = modelo.calcular_perdida(y_true_oh, y_prob)
+    return {'loss': float(perdida), 'accuracy': float(precision)}
 
 
 def entrenar_modelo(force: bool = False, verbose: bool = False) -> Tuple[NeuralNetwork, Dict[str, Dict[str, float]]]:
+    """Entrenar el modelo; reutilizar el pickle existente salvo que ``force`` sea True."""
     X_train, X_val, X_test, y_train, y_val, y_test = preparar_datos(aplicar_augmentacion=True)
 
     num_clases = DEFAULT_LABEL_MAP.get_num_classes()
@@ -103,16 +113,16 @@ def entrenar_modelo(force: bool = False, verbose: bool = False) -> Tuple[NeuralN
     y_val_oh = _one_hot(y_val, num_clases)
     y_test_oh = _one_hot(y_test, num_clases)
 
-    modelo_path = Path(PATHS['modelos']) / "modelo_entrenado.pkl"
+    modelo_path = Path(PATHS['modelos']) / 'modelo_entrenado.pkl'
     modelo_path.parent.mkdir(parents=True, exist_ok=True)
 
     if modelo_path.exists() and not force:
-        print("Modelo existente encontrado. Use --force para reentrenar.")
-        with modelo_path.open('rb') as f:
-            modelo = pickle.load(f)
+        print('Modelo existente encontrado. Use --force para reentrenar.')
+        with modelo_path.open('rb') as archivo:
+            modelo = pickle.load(archivo)
     else:
         modelo = _construir_modelo(X_train.shape[1], num_clases)
-        print("Entrenando modelo...")
+        print('Entrenando modelo...')
         modelo.fit(
             X_train,
             y_train_oh,
@@ -122,9 +132,9 @@ def entrenar_modelo(force: bool = False, verbose: bool = False) -> Tuple[NeuralN
             Y_val=y_val_oh,
             verbose=verbose,
         )
-        with modelo_path.open('wb') as f:
-            pickle.dump(modelo, f)
-        print(f"Modelo guardado en {modelo_path}")
+        with modelo_path.open('wb') as archivo:
+            pickle.dump(modelo, archivo)
+        print(f'Modelo guardado en {modelo_path}')
 
     metricas = {
         'train': _evaluar(modelo, X_train, y_train_oh),
@@ -132,30 +142,28 @@ def entrenar_modelo(force: bool = False, verbose: bool = False) -> Tuple[NeuralN
         'test': _evaluar(modelo, X_test, y_test_oh),
     }
 
-    y_pred_train = modelo.predecir(X_train)
-    y_pred_val = modelo.predecir(X_val)
-    y_pred_test = modelo.predecir(X_test)
-
-    metricas['train']['accuracy'] = float(np.mean(y_pred_train == y_train))
-    metricas['val']['accuracy'] = float(np.mean(y_pred_val == y_val))
-    metricas['test']['accuracy'] = float(np.mean(y_pred_test == y_test))
+    metricas['train']['accuracy'] = float(np.mean(modelo.predecir(X_train) == y_train))
+    metricas['val']['accuracy'] = float(np.mean(modelo.predecir(X_val) == y_val))
+    metricas['test']['accuracy'] = float(np.mean(modelo.predecir(X_test) == y_test))
 
     return modelo, metricas
 
 
 def cargar_modelo_guardado() -> NeuralNetwork:
-    modelo_path = Path(PATHS['modelos']) / "modelo_entrenado.pkl"
+    """Leer el modelo entrenado desde ``models/modelo_entrenado.pkl``."""
+    modelo_path = Path(PATHS['modelos']) / 'modelo_entrenado.pkl'
     if not modelo_path.exists():
-        raise FileNotFoundError("No se encontro el modelo entrenado. Ejecute `python -m src.trainer --force`.")
-    with modelo_path.open('rb') as f:
-        return pickle.load(f)
+        raise FileNotFoundError('No se encontro el modelo entrenado. Ejecute `python -m src.trainer --force`.')
+    with modelo_path.open('rb') as archivo:
+        return pickle.load(archivo)
 
 
 def evaluar_modelo(modelo: NeuralNetwork) -> Dict[str, Dict[str, float]]:
+    """Generar metricas en train/val/test sin augmentacion adicional."""
     X_train, X_val, X_test, y_train, y_val, y_test = preparar_datos(aplicar_augmentacion=False)
     num_clases = DEFAULT_LABEL_MAP.get_num_classes()
 
-    metricas = {}
+    metricas: Dict[str, Dict[str, float]] = {}
     for nombre, X_split, y_split in (
         ('train', X_train, y_train),
         ('val', X_val, y_val),
@@ -163,28 +171,29 @@ def evaluar_modelo(modelo: NeuralNetwork) -> Dict[str, Dict[str, float]]:
     ):
         y_one_hot = _one_hot(y_split, num_clases)
         resultados = _evaluar(modelo, X_split, y_one_hot)
-        y_pred = modelo.predecir(X_split)
-        resultados['accuracy'] = float(np.mean(y_pred == y_split))
+        resultados['accuracy'] = float(np.mean(modelo.predecir(X_split) == y_split))
         metricas[nombre] = resultados
 
     return metricas
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Entrenamiento de red neuronal para caracteres personalizados")
+    """Crear el parser de argumentos para la CLI."""
+    parser = argparse.ArgumentParser(description='Entrenamiento de red neuronal para caracteres personalizados')
     parser.add_argument('--force', action='store_true', help='Reentrenar aunque exista un modelo guardado')
     parser.add_argument('--verbose', action='store_true', help='Mostrar progreso detallado de entrenamiento')
     return parser.parse_args()
 
 
 def main() -> None:
+    """Ejecutar entrenamiento desde la linea de comandos."""
     args = parse_args()
     _, metricas = entrenar_modelo(force=args.force, verbose=args.verbose)
-    print("Resultados:")
+    print('Resultados:')
     for split, valores in metricas.items():
         loss = valores['loss']
         acc = valores['accuracy']
-        print(f"  {split}: loss={loss:.4f} accuracy={acc:.4f}")
+        print(f'  {split}: loss={loss:.4f} accuracy={acc:.4f}')
 
 
 if __name__ == '__main__':

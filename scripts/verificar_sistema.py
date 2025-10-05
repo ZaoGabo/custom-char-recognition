@@ -1,160 +1,132 @@
-"""
-Script de prueba para verificar la carga de datos desde las carpetas organizadas.
-"""
+"""Verificacion rapida de la estructura de datos del proyecto."""
 
-import sys
+from __future__ import annotations
+
 import os
+import sys
+from pathlib import Path
+from typing import Tuple
+
 import numpy as np
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-src_dir = os.path.join(parent_dir, 'src')
-if src_dir not in sys.path:
-    sys.path.insert(0, src_dir)
+CURRENT_DIR = Path(__file__).resolve().parent
+SRC_DIR = CURRENT_DIR.parent / 'src'
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 from src.config import PATHS
 from src.data_loader import DataLoader
 
 
-def verificar_estructura_carpetas():
-    print("Verificando estructura de carpetas...")
-
-    data_path = PATHS['datos_crudos']
+def verificar_estructura_carpetas() -> bool:
+    """Comprobar que existan las 52 carpetas esperadas en ``data/raw``."""
+    print('Verificando estructura de carpetas...')
+    data_path = Path(PATHS['datos_crudos'])
     carpetas_encontradas = []
     carpetas_faltantes = []
 
     for letra in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
-        carpeta = f"{letra}_upper"
-        ruta_carpeta = os.path.join(data_path, carpeta)
-        if os.path.exists(ruta_carpeta):
-            carpetas_encontradas.append(carpeta)
+        carpeta = data_path / f'{letra}_upper'
+        if carpeta.exists():
+            carpetas_encontradas.append(carpeta.name)
         else:
-            carpetas_faltantes.append(carpeta)
+            carpetas_faltantes.append(carpeta.name)
 
     for letra in 'abcdefghijklmnopqrstuvwxyz':
-        carpeta = f"{letra}_lower"
-        ruta_carpeta = os.path.join(data_path, carpeta)
-        if os.path.exists(ruta_carpeta):
-            carpetas_encontradas.append(carpeta)
+        carpeta = data_path / f'{letra}_lower'
+        if carpeta.exists():
+            carpetas_encontradas.append(carpeta.name)
         else:
-            carpetas_faltantes.append(carpeta)
+            carpetas_faltantes.append(carpeta.name)
 
-    print(f"Carpetas encontradas: {len(carpetas_encontradas)}/52")
+    print(f'Carpetas encontradas: {len(carpetas_encontradas)}/52')
     if carpetas_faltantes:
-        print(f"Carpetas faltantes: {carpetas_faltantes}")
+        print(f'Carpetas faltantes: {carpetas_faltantes}')
     else:
-        print("Todas las carpetas estan presentes")
+        print('Todas las carpetas estan presentes')
+    return not carpetas_faltantes
 
-    return len(carpetas_faltantes) == 0
 
-
-def probar_mapeo_etiquetas():
-    print("\nProbando mapeo de etiquetas...")
-
+def probar_mapeo_etiquetas() -> None:
+    """Mostrar algunos ejemplos de mapeo carpeta -> indice."""
+    print('\nProbando mapeo de etiquetas...')
     data_loader = DataLoader(PATHS['datos_crudos'])
-
-    casos_prueba = [
-        'A_upper', 'Z_upper', 'a_lower', 'z_lower',
-        'M_upper', 'n_lower'
-    ]
-
-    for carpeta in casos_prueba:
+    for carpeta in ['A_upper', 'Z_upper', 'a_lower', 'z_lower', 'M_upper', 'n_lower']:
         etiqueta = data_loader._mapear_carpeta_a_etiqueta(carpeta)
         indice = data_loader.mapa_etiquetas.get_index(etiqueta)
-
         print(f"  {carpeta} -> '{etiqueta}' -> indice {indice}")
-        if indice == -1:
-            print(f"    Error: etiqueta '{etiqueta}' no encontrada")
-        else:
-            print("    Mapeado correctamente")
 
 
-def contar_imagenes_por_carpeta():
-    print("\nContando imagenes por carpeta...")
-
-    data_path = PATHS['datos_crudos']
+def contar_imagenes_por_carpeta() -> Tuple[int, int]:
+    """Contar la cantidad de imagenes existentes por carpeta."""
+    print('\nContando imagenes por carpeta...')
+    data_path = Path(PATHS['datos_crudos'])
     total_imagenes = 0
     carpetas_con_imagenes = 0
 
-    carpetas = [f for f in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, f))]
-    carpetas.sort()
-
-    for carpeta in carpetas:
-        if carpeta.startswith('.'):
+    for carpeta in sorted(p for p in data_path.iterdir() if p.is_dir()):
+        if carpeta.name.startswith('.'):
             continue
-
-        ruta_carpeta = os.path.join(data_path, carpeta)
-        imagenes = [f for f in os.listdir(ruta_carpeta)
-                   if f.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp'))]
-
-        num_imagenes = len(imagenes)
-        total_imagenes += num_imagenes
-
-        if num_imagenes > 0:
+        imagenes = [f for f in carpeta.iterdir() if f.suffix.lower() in {'.png', '.jpg', '.jpeg', '.bmp'}]
+        if imagenes:
             carpetas_con_imagenes += 1
-            print(f"  {carpeta}: {num_imagenes} imagenes")
+            total_imagenes += len(imagenes)
+            print(f'  {carpeta.name}: {len(imagenes)} imagenes')
 
-    print("\nResumen:")
-    print(f"  Total de carpetas: {len(carpetas)}")
-    print(f"  Carpetas con imagenes: {carpetas_con_imagenes}")
-    print(f"  Total de imagenes: {total_imagenes}")
-
-    return total_imagenes > 0
-
-
-def probar_carga_datos():
-    print("\nProbando carga de datos...")
-
-    try:
-        data_loader = DataLoader(PATHS['datos_crudos'])
-        data_loader.cargar_desde_directorio()
-
-        if len(data_loader.imagenes) > 0:
-            print("Carga exitosa:")
-            print(f"  Imagenes cargadas: {len(data_loader.imagenes)}")
-            print(f"  Forma de imagen: {data_loader.imagenes.shape}")
-            print(f"  Etiquetas unicas: {len(np.unique(data_loader.etiquetas))}")
-        else:
-            print("No se cargaron imagenes. Verifique que haya imagenes en las carpetas.")
-
-    except Exception as e:
-        print(f"Error durante la carga: {str(e)}")
-        return False
-
-    return True
+    print('\nResumen:')
+    print(f'  Total de carpetas: {sum(1 for _ in data_path.iterdir() if _.is_dir())}')
+    print(f'  Carpetas con imagenes: {carpetas_con_imagenes}')
+    print(f'  Total de imagenes: {total_imagenes}')
+    return total_imagenes, carpetas_con_imagenes
 
 
-def main():
-    print("=" * 60)
-    print("VERIFICACION DEL SISTEMA DE CARGA DE DATOS")
-    print("=" * 60)
+def probar_carga_datos() -> bool:
+    """Cargar los datos usando ``DataLoader`` y mostrar detalles basicos."""
+    print('\nProbando carga de datos...')
+    loader = DataLoader(PATHS['datos_crudos'])
+    loader.cargar_desde_directorio()
+    if len(loader.imagenes) > 0:
+        print('Carga exitosa:')
+        print(f'  Imagenes cargadas: {len(loader.imagenes)}')
+        print(f'  Forma de imagen: {loader.imagenes.shape}')
+        print(f'  Etiquetas unicas: {len(np.unique(loader.etiquetas))}')
+        return True
+    print('No se cargaron imagenes. Verifique que haya datos disponibles.')
+    return False
+
+
+def main() -> None:
+    """Ejecutar toda la verificacion desde la linea de comandos."""
+    print('=' * 60)
+    print('VERIFICACION DEL SISTEMA DE CARGA DE DATOS')
+    print('=' * 60)
 
     estructura_ok = verificar_estructura_carpetas()
     probar_mapeo_etiquetas()
-    hay_imagenes = contar_imagenes_por_carpeta()
+    total_imagenes, carpetas_con_imagenes = contar_imagenes_por_carpeta()
+    hay_imagenes = total_imagenes > 0
 
-    if hay_imagenes:
-        carga_ok = probar_carga_datos()
-    else:
-        print("\nNo hay imagenes para cargar. Agregue imagenes a las carpetas y vuelva a intentar.")
-        carga_ok = False
+    carga_ok = probar_carga_datos() if hay_imagenes else False
 
-    print("\n" + "=" * 60)
-    print("RESUMEN DE VERIFICACION")
-    print("=" * 60)
-    print(f"Estructura de carpetas: {'OK' if estructura_ok else 'ERROR'}")
-    print("Mapeo de etiquetas: OK")
-    print(f"Imagenes disponibles: {'SI' if hay_imagenes else 'NO'}")
-    print(f"Carga de datos: {'OK' if carga_ok else 'PENDIENTE' if not hay_imagenes else 'ERROR'}")
+    print('\n' + '=' * 60)
+    print('RESUMEN DE VERIFICACION')
+    print('=' * 60)
+    estado_estructura = 'OK' if estructura_ok else 'ERROR'
+    print(f'Estructura de carpetas: {estado_estructura}')
+    print('Mapeo de etiquetas: OK')
+    disponibilidad = 'SI' if hay_imagenes else 'NO'
+    print(f'Imagenes disponibles: {disponibilidad}')
+    estado_carga = 'OK' if carga_ok else ('PENDIENTE' if not hay_imagenes else 'ERROR')
+    print(f'Carga de datos: {estado_carga}')
 
     if estructura_ok and hay_imagenes and carga_ok:
-        print("\nSistema listo para entrenamiento!")
-        print("Ejecute: python -m src.trainer --force")
+        print('\nSistema listo para entrenamiento!')
+        print('Ejecute: python -m src.trainer --force')
     elif estructura_ok and not hay_imagenes:
-        print("\nSistema configurado correctamente.")
-        print("Agregue imagenes a las carpetas y ejecute: python -m src.trainer --force")
+        print('\nSistema configurado correctamente.')
+        print('Agregue imagenes a las carpetas y ejecute: python -m src.trainer --force')
     else:
-        print("\nHay problemas que resolver antes del entrenamiento.")
+        print('\nHay problemas que resolver antes del entrenamiento.')
 
 
 if __name__ == '__main__':

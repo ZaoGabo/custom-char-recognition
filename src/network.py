@@ -1,5 +1,9 @@
+"""Implementacion de una red neuronal totalmente conectada con optimizador Adam."""
+
+from __future__ import annotations
+
 import math
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -38,15 +42,15 @@ def _softmax(x: np.ndarray) -> np.ndarray:
     return exp_x / np.sum(exp_x, axis=1, keepdims=True)
 
 
-_ACTIVATIONS: Dict[str, Tuple[Callable[[np.ndarray], np.ndarray], Callable[[np.ndarray], np.ndarray]]] = {
-    "relu": (_relu, _relu_derivative),
-    "leaky_relu": (_leaky_relu, _leaky_relu_derivative),
-    "sigmoid": (_sigmoid, _sigmoid_derivative),
+_ACTIVACIONES = {
+    'relu': (_relu, _relu_derivative),
+    'leaky_relu': (_leaky_relu, _leaky_relu_derivative),
+    'sigmoid': (_sigmoid, _sigmoid_derivative),
 }
 
 
 class NeuralNetwork:
-    """Red neuronal multicapa con soporte para Adam, L2 y dropout."""
+    """Red neuronal multicapa con soporte para dropout, L2 y Adam."""
 
     def __init__(
         self,
@@ -61,24 +65,20 @@ class NeuralNetwork:
         semilla: Optional[int] = None,
     ) -> None:
         if len(capas) < 2:
-            raise ValueError("Se requiere al menos una capa de entrada y una de salida")
+            raise ValueError('Se requiere al menos una capa de entrada y una de salida')
 
         self.capas = capas
         self.num_capas = len(capas)
+        self.activaciones = activaciones or ['relu'] * (self.num_capas - 2) + ['softmax']
+        if len(self.activaciones) != self.num_capas - 1:
+            raise ValueError('El numero de activaciones debe ser num_capas - 1')
 
-        if activaciones is None:
-            activaciones = ["relu"] * (self.num_capas - 2) + ["softmax"]
-        if len(activaciones) != self.num_capas - 1:
-            raise ValueError("La cantidad de activaciones debe ser num_capas - 1")
-
-        self.activaciones = activaciones
         self.tasa_aprendizaje = tasa_aprendizaje
         self.lambda_l2 = lambda_l2
         self.dropout_rate = dropout_rate
         self.beta1 = beta1
         self.beta2 = beta2
         self.epsilon = epsilon
-
         self.rng = np.random.default_rng(semilla)
 
         self.pesos: List[np.ndarray] = []
@@ -90,6 +90,7 @@ class NeuralNetwork:
         self._inicializar_parametros()
 
     def _inicializar_parametros(self) -> None:
+        """Inicializar pesos, sesgos y momentos."""
         self.pesos.clear()
         self.sesgos.clear()
         self.momentos_m.clear()
@@ -100,7 +101,7 @@ class NeuralNetwork:
             fan_out = self.capas[i + 1]
             activacion = self.activaciones[i]
 
-            if activacion in ("relu", "leaky_relu"):
+            if activacion in ('relu', 'leaky_relu'):
                 limite = math.sqrt(2.0 / fan_in)
             else:
                 limite = math.sqrt(1.0 / fan_in)
@@ -113,58 +114,65 @@ class NeuralNetwork:
             self.momentos_m.append(np.zeros_like(pesos))
             self.momentos_v.append(np.zeros_like(pesos))
 
-    def _aplicar_dropout(self, A: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def _aplicar_dropout(self, activaciones: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Aplicar máscara de dropout y devolver logits y máscara."""
         if self.dropout_rate <= 0.0:
-            return A, np.ones_like(A)
-        mascara = (self.rng.random(A.shape) > self.dropout_rate).astype(np.float32)
-        A_dropout = (A * mascara) / (1.0 - self.dropout_rate)
-        return A_dropout, mascara
+            return activaciones, np.ones_like(activaciones)
+        mascara = (self.rng.random(activaciones.shape) > self.dropout_rate).astype(np.float32)
+        activaciones_dropout = (activaciones * mascara) / (1.0 - self.dropout_rate)
+        return activaciones_dropout, mascara
 
     def _forward(
-        self, X: np.ndarray, training: bool = True
-    ):
-        caches = {}
-        A = X.T
-        caches["A0"] = A
-
-        dropout_masks = {}
+        self,
+        X: np.ndarray,
+        training: bool = True,
+    ) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
+        """Realizar el paso forward y devolver caches intermedios."""
+        caches: Dict[str, np.ndarray] = {}
+        dropout_masks: Dict[str, np.ndarray] = {}
+        activacion_actual = X.T
+        caches['A0'] = activacion_actual
 
         for i in range(self.num_capas - 1):
-            W = self.pesos[i]
-            b = self.sesgos[i]
-            Z = W @ A + b
-            caches[f"Z{i+1}"] = Z
+            pesos = self.pesos[i]
+            sesgos = self.sesgos[i]
+            logits = pesos @ activacion_actual + sesgos
+            caches[f'Z{i+1}'] = logits
 
-            activacion = self.activaciones[i]
-            if activacion == "softmax":
-                A = _softmax(Z.T).T
-            elif activacion == "sigmoid":
-                A = _sigmoid(Z)
-            elif activacion == "relu":
-                A = _relu(Z)
-            elif activacion == "leaky_relu":
-                A = _leaky_relu(Z)
+            nombre_activacion = self.activaciones[i]
+            if nombre_activacion == 'softmax':
+                activacion_actual = _softmax(logits.T).T
+            elif nombre_activacion == 'sigmoid':
+                activacion_actual = _sigmoid(logits)
+            elif nombre_activacion == 'relu':
+                activacion_actual = _relu(logits)
+            elif nombre_activacion == 'leaky_relu':
+                activacion_actual = _leaky_relu(logits)
             else:
-                raise ValueError(f"Activacion no soportada: {activacion}")
+                raise ValueError(f'Activacion no soportada: {nombre_activacion}')
 
             if training and i < self.num_capas - 2 and self.dropout_rate > 0.0:
-                A, mask = self._aplicar_dropout(A)
-                dropout_masks[f"dropout{i+1}"] = mask
+                activacion_actual, mascara = self._aplicar_dropout(activacion_actual)
+                dropout_masks[f'dropout{i+1}'] = mascara
 
-            caches[f"A{i+1}"] = A
+            caches[f'A{i+1}'] = activacion_actual
 
         return caches, dropout_masks
 
     def _calcular_perdida(self, Y: np.ndarray, Y_pred: np.ndarray) -> float:
-        m = Y.shape[0]
+        """Calcular la funcion de perdida cross-entropy (con regularizacion L2)."""
+        muestras = Y.shape[0]
         eps = 1e-12
         log_probs = np.log(np.clip(Y_pred, eps, 1.0))
-        perdida = -np.sum(Y * log_probs) / m
-
+        perdida = -np.sum(Y * log_probs) / muestras
         if self.lambda_l2 > 0.0:
-            suma = sum(np.sum(np.square(W)) for W in self.pesos)
-            perdida += (self.lambda_l2 / (2.0 * m)) * suma
+            suma = sum(np.sum(np.square(peso)) for peso in self.pesos)
+            perdida += (self.lambda_l2 / (2.0 * muestras)) * suma
         return float(perdida)
+
+    def calcular_perdida(self, Y_true_one_hot: np.ndarray, Y_pred_prob: np.ndarray) -> float:
+        """Interfaz publica para obtener la perdida del modelo."""
+        return self._calcular_perdida(Y_true_one_hot, Y_pred_prob)
 
     def _backward(
         self,
@@ -172,48 +180,48 @@ class NeuralNetwork:
         dropout_masks: Dict[str, np.ndarray],
         X: np.ndarray,
         Y: np.ndarray,
-    ):
-        m = X.shape[0]
-        A_final = caches[f"A{self.num_capas - 1}"]
-        dZ = (A_final.T - Y) / m
-        dZ = dZ.T
+    ) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+        """Calcular gradientes para pesos y sesgos."""
+        muestras = X.shape[0]
+        activacion_final = caches[f'A{self.num_capas - 1}']
+        grad_actual = (activacion_final.T - Y) / muestras
+        grad_actual = grad_actual.T
 
-        grads_W: List[np.ndarray] = [np.zeros_like(W) for W in self.pesos]
-        grads_b: List[np.ndarray] = [np.zeros_like(b) for b in self.sesgos]
+        grads_W = [np.zeros_like(peso) for peso in self.pesos]
+        grads_b = [np.zeros_like(sesgo) for sesgo in self.sesgos]
 
         for i in reversed(range(self.num_capas - 1)):
-            A_prev = caches[f"A{i}"]
-            grads_W[i] = dZ @ A_prev.T
-            grads_b[i] = np.sum(dZ, axis=1, keepdims=True)
+            activacion_prev = caches[f'A{i}']
+            grads_W[i] = grad_actual @ activacion_prev.T
+            grads_b[i] = np.sum(grad_actual, axis=1, keepdims=True)
 
             if self.lambda_l2 > 0.0:
-                grads_W[i] += (self.lambda_l2 / m) * self.pesos[i]
+                grads_W[i] += (self.lambda_l2 / muestras) * self.pesos[i]
 
             if i > 0:
-                W = self.pesos[i]
-                dA_prev = W.T @ dZ
-                Z_prev = caches[f"Z{i}"]
+                pesos = self.pesos[i]
+                grad_prev = pesos.T @ grad_actual
+                logits_prev = caches[f'Z{i}']
 
-                activacion = self.activaciones[i - 1]
-                if activacion == "relu":
-                    dZ_prev = dA_prev * _relu_derivative(Z_prev)
-                elif activacion == "leaky_relu":
-                    dZ_prev = dA_prev * _leaky_relu_derivative(Z_prev)
-                elif activacion == "sigmoid":
-                    dZ_prev = dA_prev * _sigmoid_derivative(Z_prev)
-                else:
-                    dZ_prev = dA_prev
+                nombre_activacion = self.activaciones[i - 1]
+                if nombre_activacion == 'relu':
+                    grad_prev *= _relu_derivative(logits_prev)
+                elif nombre_activacion == 'leaky_relu':
+                    grad_prev *= _leaky_relu_derivative(logits_prev)
+                elif nombre_activacion == 'sigmoid':
+                    grad_prev *= _sigmoid_derivative(logits_prev)
 
-                if self.dropout_rate > 0.0 and f"dropout{i}" in dropout_masks:
-                    mask = dropout_masks[f"dropout{i}"]
-                    dZ_prev *= mask
-                    dZ_prev /= (1.0 - self.dropout_rate)
+                if self.dropout_rate > 0.0 and f'dropout{i}' in dropout_masks:
+                    mascara = dropout_masks[f'dropout{i}']
+                    grad_prev *= mascara
+                    grad_prev /= (1.0 - self.dropout_rate)
 
-                dZ = dZ_prev
+                grad_actual = grad_prev
 
         return grads_W, grads_b
 
     def _actualizar_parametros(self, grads_W: List[np.ndarray], grads_b: List[np.ndarray]) -> None:
+        """Actualizar pesos y sesgos usando Adam."""
         self.t += 1
         for i in range(self.num_capas - 1):
             self.momentos_m[i] = self.beta1 * self.momentos_m[i] + (1.0 - self.beta1) * grads_W[i]
@@ -236,28 +244,27 @@ class NeuralNetwork:
         Y_val: Optional[np.ndarray] = None,
         verbose: bool = False,
     ) -> List[Dict[str, float]]:
-        if X.ndim != 2:
-            raise ValueError("X debe ser un arreglo 2D (muestras, caracteristicas)")
-        if Y.ndim != 2:
-            raise ValueError("Y debe ser un arreglo 2D (muestras, clases)")
+        """Entrenar la red neuronal mediante mini-batch gradient descent."""
+        if X.ndim != 2 or Y.ndim != 2:
+            raise ValueError('X e Y deben ser matrices 2D (muestras x caracteristicas/clases)')
         if X.shape[0] != Y.shape[0]:
-            raise ValueError("X y Y deben tener la misma cantidad de muestras")
+            raise ValueError('X e Y deben tener la misma cantidad de muestras')
 
         historia: List[Dict[str, float]] = []
-        n = X.shape[0]
+        muestras = X.shape[0]
 
         for epoca in range(epocas):
-            indices = np.arange(n)
+            indices = np.arange(muestras)
             if barajar:
                 self.rng.shuffle(indices)
             X_barajado = X[indices]
             Y_barajado = Y[indices]
 
-            for inicio in range(0, n, tamano_lote):
+            for inicio in range(0, muestras, tamano_lote):
                 fin = inicio + tamano_lote
                 X_lote = X_barajado[inicio:fin]
                 Y_lote = Y_barajado[inicio:fin]
-                if X_lote.size == 0:
+                if not X_lote.size:
                     continue
 
                 caches, masks = self._forward(X_lote, training=True)
@@ -265,22 +272,21 @@ class NeuralNetwork:
                 self._actualizar_parametros(grads_W, grads_b)
 
             caches_train, _ = self._forward(X, training=False)
-            Y_pred = caches_train[f"A{self.num_capas - 1}"].T
+            Y_pred = caches_train[f'A{self.num_capas - 1}'].T
             perdida_train = self._calcular_perdida(Y, Y_pred)
-            registro = {"epoch": epoca + 1, "loss_train": perdida_train}
+            registro = {'epoch': epoca + 1, 'loss_train': perdida_train}
 
             if X_val is not None and Y_val is not None:
                 caches_val, _ = self._forward(X_val, training=False)
-                Y_val_pred = caches_val[f"A{self.num_capas - 1}"].T
-                perdida_val = self._calcular_perdida(Y_val, Y_val_pred)
-                registro["loss_val"] = perdida_val
-                registro["acc_val"] = self.calcular_precision(Y_val, Y_val_pred)
+                Y_val_pred = caches_val[f'A{self.num_capas - 1}'].T
+                registro['loss_val'] = self._calcular_perdida(Y_val, Y_val_pred)
+                registro['acc_val'] = self.calcular_precision(Y_val, Y_val_pred)
 
             historia.append(registro)
 
             if verbose and ((epoca + 1) % max(1, epocas // 10) == 0 or epoca == epocas - 1):
                 mensaje = f"Epoca {epoca + 1}/{epocas} - loss: {perdida_train:.4f}"
-                if "loss_val" in registro:
+                if 'loss_val' in registro:
                     mensaje += f" - val_loss: {registro['loss_val']:.4f}"
                     mensaje += f" - val_acc: {registro['acc_val']:.4f}"
                 print(mensaje)
@@ -288,21 +294,25 @@ class NeuralNetwork:
         return historia
 
     def predecir_probabilidades(self, X: np.ndarray) -> np.ndarray:
+        """Obtener probabilidades de salida para ``X``."""
         if X.ndim == 1:
             X = X.reshape(1, -1)
         caches, _ = self._forward(X, training=False)
-        return caches[f"A{self.num_capas - 1}"].T
+        return caches[f'A{self.num_capas - 1}'].T
 
     def predecir(self, X: np.ndarray) -> np.ndarray:
+        """Devolver los indices de las clases con mayor probabilidad."""
         probabilidades = self.predecir_probabilidades(X)
         return np.argmax(probabilidades, axis=1)
 
     @staticmethod
     def calcular_precision(Y_true_one_hot: np.ndarray, Y_pred_prob: np.ndarray) -> float:
+        """Calcular la precision basada en codificacion one-hot."""
         y_true = np.argmax(Y_true_one_hot, axis=1)
         y_pred = np.argmax(Y_pred_prob, axis=1)
         return float(np.mean(y_true == y_pred))
 
     def reset(self) -> None:
+        """Reinicializar pesos y contadores del optimizador."""
         self.t = 0
         self._inicializar_parametros()

@@ -1,58 +1,52 @@
+"""Generacion de imagenes sinteticas para entrenamiento."""
+
+from __future__ import annotations
+
 import os
 import random
+from pathlib import Path
+from typing import Iterable
+
 from PIL import Image, ImageDraw, ImageFont
-from ..config import PATHS, CUSTOM_LABELS
 
-def generar_imagenes_sinteticas(cantidad_por_clase=10):
-    """
-    Genera imágenes sintéticas para cada clase de carácter.
-    Crea las imágenes en las carpetas con sufijos _upper/_lower.
-    """
-    ruta_raw = PATHS['datos_crudos']
-    os.makedirs(ruta_raw, exist_ok=True)
+from ..config import CUSTOM_LABELS, PATHS
 
-    # Fuente por defecto (puedes cambiarla si tienes otras instaladas)
+
+def _obtener_fuente() -> ImageFont.ImageFont:
+    """Obtener una fuente TrueType si esta disponible, o la fuente por defecto."""
     try:
-        fuente = ImageFont.truetype("arial.ttf", 20)
-    except:
-        fuente = ImageFont.load_default()
+        return ImageFont.truetype('arial.ttf', 20)
+    except OSError:  # pragma: no cover - depende del SO
+        return ImageFont.load_default()
 
-    # Mapear cada letra a su carpeta correspondiente
+
+def _nombre_carpeta(letra: str) -> str:
+    return f"{letra}_upper" if letra.isupper() else f"{letra}_lower"
+
+
+def generar_imagenes_sinteticas(cantidad_por_clase: int = 10) -> None:
+    """Crear ``cantidad_por_clase`` imagenes por letra en ``data/raw``."""
+    ruta_raw = Path(PATHS['datos_crudos'])
+    ruta_raw.mkdir(parents=True, exist_ok=True)
+
+    fuente = _obtener_fuente()
+
     for letra in CUSTOM_LABELS:
-        # Determinar el nombre de la carpeta según si es mayúscula o minúscula
-        if letra.isupper():
-            carpeta_nombre = f"{letra}_upper"
-        else:
-            carpeta_nombre = f"{letra}_lower"
-            
-        carpeta_clase = os.path.join(ruta_raw, carpeta_nombre)
-        
-        # Crear carpeta si no existe
-        if not os.path.exists(carpeta_clase):
-            os.makedirs(carpeta_clase, exist_ok=True)
+        carpeta = ruta_raw / _nombre_carpeta(letra)
+        carpeta.mkdir(parents=True, exist_ok=True)
+        print(f"Generando {cantidad_por_clase} imagenes para '{letra}' en '{carpeta.name}'...")
 
-        print(f"Generando {cantidad_por_clase} imágenes para '{letra}' en carpeta '{carpeta_nombre}'...")
+        for indice in range(cantidad_por_clase):
+            imagen = Image.new('L', (28, 28), color=0)
+            draw = ImageDraw.Draw(imagen)
+            posicion = (random.randint(6, 12), random.randint(3, 8))
+            draw.text(posicion, letra, font=fuente, fill=255)
+            imagen.save(carpeta / f"{letra}_{indice:03d}.png")
 
-        for i in range(cantidad_por_clase):
-            # Crear imagen en escala de grises
-            img = Image.new('L', (28, 28), color=0)  # Fondo negro
-            draw = ImageDraw.Draw(img)
+    total = cantidad_por_clase * len(CUSTOM_LABELS)
+    print(f"Generadas {total} imagenes sinteticas ({len(CUSTOM_LABELS)} clases).")
+    print(f"Ubicacion: {ruta_raw}")
 
-            # Posición aleatoria para variar (centrado con pequeña variación)
-            x = random.randint(6, 12)
-            y = random.randint(3, 8)
-            
-            # Dibujar la letra en blanco
-            draw.text((x, y), letra, font=fuente, fill=255)
 
-            # Nombre de archivo
-            nombre = f"{letra}_{i:03d}.png"
-            ruta_imagen = os.path.join(carpeta_clase, nombre)
-            img.save(ruta_imagen)
-
-    total_imagenes = cantidad_por_clase * len(CUSTOM_LABELS)
-    print(f"✅ Generadas {total_imagenes} imágenes sintéticas ({len(CUSTOM_LABELS)} clases × {cantidad_por_clase} imágenes)")
-    print(f"📁 Ubicación: {ruta_raw}")
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     generar_imagenes_sinteticas(cantidad_por_clase=15)

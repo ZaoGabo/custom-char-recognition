@@ -1,182 +1,134 @@
-"""
-Aplicación web simple para probar el reconocimiento de caracteres.
-"""
+"""Aplicacion web simplificada para probar el modelo clasico."""
 
-import streamlit as st
-import numpy as np
+from __future__ import annotations
+
 import pickle
-import os
-import sys
-from PIL import Image
 import string
+import sys
+from pathlib import Path
 
-# Importar la clase del modelo
+import numpy as np
+import streamlit as st
+from PIL import Image, UnidentifiedImageError
+
+sys.path.append('demo')
 from modelo import RedNeuronalSimple
 
-# Configuración
-MODELO_PATH = "../models/modelo_entrenado.pkl"
-
-# Mapeo de etiquetas (A-Z mayúsculas, a-z minúsculas)
+MODELO_PATH = Path(__file__).resolve().parent.parent / 'models' / 'modelo_entrenado.pkl'
 ETIQUETAS = list(string.ascii_uppercase) + list(string.ascii_lowercase)
 
-def cargar_modelo():
-    """Cargar modelo entrenado."""
-    modelo_path = os.path.join(os.path.dirname(__file__), MODELO_PATH)
-    
-    if not os.path.exists(modelo_path):
-        st.error("❌ No se encontró el modelo entrenado.")
-        st.info("Ejecute primero: `python train_simple.py`")
+
+def cargar_modelo() -> RedNeuronalSimple | None:
+    """Cargar el modelo `RedNeuronalSimple` pickled."""
+    if not MODELO_PATH.exists():
+        st.error('No se encontro el modelo entrenado.')
+        st.info('Ejecute primero: `python scripts/run_pipeline.py --force`')
         return None
-    
+
     try:
-        # Asegurarse de que la clase esté disponible
-        sys.modules['__main__'].RedNeuronalSimple = RedNeuronalSimple
-        
-        with open(modelo_path, 'rb') as f:
-            modelo = pickle.load(f)
-        return modelo
-    except Exception as e:
-        st.error(f"❌ Error cargando el modelo: {str(e)}")
-        
-        # Mostrar información adicional de debug
-        with st.expander("🔧 Información de Debug"):
-            st.write(f"**Ruta del modelo:** {modelo_path}")
-            st.write(f"**Archivo existe:** {os.path.exists(modelo_path)}")
-            st.write(f"**Error completo:** {repr(e)}")
-            
+        sys.modules['__main__'].RedNeuronalSimple = RedNeuronalSimple  # para pickle
+        with MODELO_PATH.open('rb') as archivo:
+            return pickle.load(archivo)
+    except (OSError, pickle.UnpicklingError) as exc:
+        st.error(f'Error cargando el modelo: {exc}')
+        with st.expander('Informacion de debug'):
+            st.write(f"**Ruta del modelo:** {MODELO_PATH}")
+            st.write(f"**Archivo existe:** {MODELO_PATH.exists()}")
+            st.write(f"**Error completo:** {repr(exc)}")
         return None
 
-def preprocesar_imagen(imagen_pil):
-    """Preprocesar imagen para el modelo."""
-    # Convertir a escala de grises
-    imagen_pil = imagen_pil.convert('L')
-    
-    # Redimensionar a 28x28
-    imagen_pil = imagen_pil.resize((28, 28))
-    
-    # Convertir a numpy y normalizar
-    imagen_np = np.array(imagen_pil).astype(np.float32)
-    imagen_np = imagen_np / 255.0  # Normalizar a [0, 1]
-    
-    return imagen_np.flatten()
 
-def main():
-    """Función principal de la aplicación."""
-    # Configurar página
-    st.set_page_config(
-        page_title="Reconocimiento de Caracteres", 
-        page_icon="🔤",
-        layout="centered"
-    )
-    
-    st.title("🔤 Reconocimiento de Caracteres Personalizados")
-    st.markdown("---")
-    st.write("Sube una imagen de un carácter para probar el modelo de red neuronal.")
-    
-    # Cargar modelo
+def preprocesar_imagen(imagen_pil: Image.Image) -> np.ndarray:
+    """Convertir una imagen PIL en vector normalizado para la red clasica."""
+    imagen = imagen_pil.convert('L').resize((28, 28))
+    return np.asarray(imagen, dtype=np.float32).flatten() / 255.0
+
+
+def _mostrar_top_predicciones(probabilidades: np.ndarray) -> None:
+    """Mostrar top-5 predicciones para el modelo clasico."""
+    indices = np.argsort(probabilidades.flatten())[-5:][::-1]
+    for posicion, indice in enumerate(indices, start=1):
+        etiqueta = ETIQUETAS[indice]
+        probabilidad = float(probabilidades[indice])
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col1:
+            st.write(f"**{posicion}. '{etiqueta}'**")
+        with col2:
+            st.progress(probabilidad)
+        with col3:
+            st.write(f"{probabilidad:.3f}")
+
+
+def main() -> None:
+    """Punto de entrada de la version simple de la demo."""
+    st.set_page_config(page_title='Reconocimiento de Caracteres', page_icon='✏', layout='centered')
+    st.title('Reconocimiento de Caracteres Personalizados (Demo simple)')
+    st.markdown('---')
+    st.write('Sube una imagen para probar el modelo clasico entrenado desde cero.')
+
     modelo = cargar_modelo()
     if modelo is None:
         st.stop()
-    
-    st.success("✅ Modelo cargado exitosamente")
-    
-    # Mostrar información del modelo
-    with st.expander("ℹ️ Información del Modelo"):
-        st.write(f"**Clases soportadas:** {len(ETIQUETAS)} caracteres")
-        st.write(f"**Arquitectura:** 784 → 128 → 52 neuronas")
-        st.write("**Caracteres:** A-Z (mayúsculas) y a-z (minúsculas)")
-    
-    # Subir imagen
-    st.markdown("### 📷 Subir Imagen")
-    imagen_subida = st.file_uploader(
-        "Selecciona una imagen de un carácter:", 
-        type=["png", "jpg", "jpeg", "bmp"]
-    )
-    
-    if imagen_subida:
-        # Mostrar imagen original
-        imagen_pil = Image.open(imagen_subida)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**Imagen Original**")
-            st.image(imagen_pil, caption="Imagen subida", use_column_width=True)
-        
-        # Preprocesar imagen
-        entrada = preprocesar_imagen(imagen_pil)
-        
-        with col2:
-            # Mostrar imagen procesada
-            st.markdown("**Imagen Procesada (28x28)**")
-            imagen_procesada = entrada.reshape(28, 28)
-            st.image(imagen_procesada, caption="Imagen procesada", use_column_width=True, clamp=True)
-        
-        # Hacer predicción
-        if st.button("🔍 Predecir Carácter", type="primary"):
-            try:
-                # Obtener predicción del modelo
-                salida = modelo.predecir(entrada)
-                
-                # Encontrar la clase con mayor probabilidad
-                indice_predicho = np.argmax(salida)
-                confianza = salida[indice_predicho]
-                etiqueta_predicha = ETIQUETAS[indice_predicho]
-                
-                # Mostrar resultado
-                st.markdown("### 🎯 Resultado de la Predicción")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.metric(
-                        label="Carácter Predicho", 
-                        value=f"'{etiqueta_predicha}'"
-                    )
-                
-                with col2:
-                    st.metric(
-                        label="Confianza", 
-                        value=f"{float(confianza):.3f}",
-                        delta=f"{float(confianza)*100:.1f}%"
-                    )
-                
-                # Mostrar barra de confianza
-                st.progress(float(confianza))
-                
-                # Mostrar top 5 predicciones
-                st.markdown("#### 📊 Top 5 Predicciones")
-                
-                # Obtener top 5 índices
-                top_indices = np.argsort(salida.flatten())[-5:][::-1]
-                
-                for i, idx in enumerate(top_indices):
-                    etiqueta = ETIQUETAS[idx]
-                    probabilidad = float(salida[idx])
-                    
-                    col1, col2, col3 = st.columns([1, 2, 1])
-                    
-                    with col1:
-                        st.write(f"**{i+1}. '{etiqueta}'**")
-                    
-                    with col2:
-                        st.progress(probabilidad)
-                    
-                    with col3:
-                        st.write(f"{probabilidad:.3f}")
-                
-            except Exception as e:
-                st.error(f"❌ Error durante la predicción: {str(e)}")
-                st.write("Detalles del error:")
-                st.code(str(e))
-    
-    # Información adicional
-    st.markdown("---")
-    st.markdown("### 💡 Consejos:")
-    st.write("- Use imágenes claras con buen contraste")
-    st.write("- Los caracteres deben estar centrados")
-    st.write("- Funciona mejor con fondos simples")
-    st.write("- El modelo puede distinguir entre mayúsculas y minúsculas")
+    st.success('Modelo cargado exitosamente')
 
-if __name__ == "__main__":
+    with st.expander('Informacion del Modelo'):
+        st.write(f"**Clases soportadas:** {len(ETIQUETAS)} caracteres")
+        st.write('**Arquitectura:** 784 → 128 → 52 neuronas')
+        st.write('**Caracteres:** A-Z (mayusculas) y a-z (minusculas)')
+
+    st.markdown('### Subir Imagen')
+    imagen_subida = st.file_uploader(
+        'Selecciona una imagen de un caracter:',
+        type=['png', 'jpg', 'jpeg', 'bmp'],
+    )
+
+    if not imagen_subida:
+        return
+
+    try:
+        imagen_pil = Image.open(imagen_subida)
+    except (OSError, UnidentifiedImageError) as exc:
+        st.error(f'No se pudo abrir la imagen: {exc}')
+        return
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown('**Imagen Original**')
+        st.image(imagen_pil, caption='Imagen subida', use_column_width=True)
+
+    entrada = preprocesar_imagen(imagen_pil)
+    with col2:
+        st.markdown('**Imagen Procesada (28x28)**')
+        st.image(entrada.reshape(28, 28), caption='Imagen procesada', use_column_width=True, clamp=True)
+
+    if st.button('Predecir Caracter', type='primary'):
+        try:
+            salida = modelo.predecir(entrada)
+        except (ValueError, TypeError) as exc:
+            st.error(f'Error durante la prediccion: {exc}')
+            return
+
+        indice_predicho = int(np.argmax(salida))
+        confianza = float(salida[indice_predicho])
+        etiqueta_predicha = ETIQUETAS[indice_predicho]
+
+        st.markdown('### Resultado de la Prediccion')
+        info_col, conf_col = st.columns(2)
+        with info_col:
+            st.metric(label='Caracter Predicho', value=f"'{etiqueta_predicha}'")
+        with conf_col:
+            st.metric(label='Confianza', value=f'{confianza:.3f}', delta=f'{confianza * 100:.1f}%')
+        st.progress(confianza)
+
+        st.markdown('#### Top 5 Predicciones')
+        _mostrar_top_predicciones(salida)
+
+    st.markdown('---')
+    st.markdown('### Consejos')
+    st.write('- Usa imagenes con buen contraste.')
+    st.write('- Centra el caracter en el lienzo.')
+    st.write('- Evita fondos complejos o ruidosos.')
+
+
+if __name__ == '__main__':
     main()

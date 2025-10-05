@@ -1,297 +1,277 @@
-"""
-Carga y preprocesamiento de datos.
-"""
+"""Data loading and preprocessing utilities."""
+
+from __future__ import annotations
 
 import os
-try:
-    import cv2  # type: ignore
-except ImportError:
-    cv2 = None
+from pathlib import Path
+from typing import Iterable, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
 from PIL import Image
-from typing import Tuple
+
+try:
+    import cv2  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    cv2 = None
+
 try:
     from sklearn.model_selection import train_test_split
-except ImportError:
+except ImportError:  # pragma: no cover - optional dependency
     train_test_split = None
+
 from .config import DATA_CONFIG
 from .label_map import LabelMap, DEFAULT_LABEL_MAP
-from .utils import normalize_image, apply_augmentation
+from .utils import apply_augmentation, normalize_image
+
+CV2_IMREAD_GRAYSCALE = getattr(cv2, "IMREAD_GRAYSCALE", 0) if cv2 is not None else 0
+
 
 def _leer_imagen_gris(ruta_imagen: str, tamano: Tuple[int, int]) -> np.ndarray:
+    """Return a grayscale image resized to ``tamano``."""
     alto, ancho = tamano
     if cv2 is not None:
-        img = cv2.imread(ruta_imagen, cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            raise ValueError(f"No se pudo cargar la imagen {ruta_imagen}")
-        return cv2.resize(img, (ancho, alto))
-    img = Image.open(ruta_imagen).convert('L')
-    img = img.resize((ancho, alto))
-    return np.array(img, dtype=np.uint8)
+        imread = getattr(cv2, "imread", None)
+        resize = getattr(cv2, "resize", None)
+        if callable(imread) and callable(resize):
+            imagen = imread(ruta_imagen, CV2_IMREAD_GRAYSCALE)
+            if imagen is None:
+                raise ValueError(f"No se pudo cargar la imagen {ruta_imagen}")
+            return resize(imagen, (ancho, alto))
+
+    with Image.open(ruta_imagen) as img_pil:
+        imagen = img_pil.convert("L").resize((ancho, alto))
+    return np.array(imagen, dtype=np.uint8)
 
 
 class DataLoader:
-    def __init__(self, ruta_datos, mapa_etiquetas=None):
-        """
-        Inicializar el cargador de datos.
-        
-        Args:
-            ruta_datos (str): Ruta a los datos
-            mapa_etiquetas (LabelMap): Mapeo de etiquetas
-        """
+    """Carga y preprocesamiento de datos para la red neuronal."""
+
+    def __init__(self, ruta_datos: str, mapa_etiquetas: Optional[LabelMap] = None) -> None:
         self.ruta_datos = ruta_datos
         self.mapa_etiquetas = mapa_etiquetas or DEFAULT_LABEL_MAP
-        self.imagenes = []
-        self.etiquetas = []
-    
-    def _mapear_carpeta_a_etiqueta(self, nombre_carpeta):
-        """
-        Mapear nombre de carpeta con sufijo a etiqueta real.
-        
-        Args:
-            nombre_carpeta (str): Nombre de la carpeta (ej: 'A_upper', 'a_lower')
-            
-        Returns:
-            str: Etiqueta real (ej: 'A', 'a') o None si no se puede mapear
-        """
-        if nombre_carpeta.endswith('_upper'):
+        self.imagenes: np.ndarray = np.array([])
+        self.etiquetas: np.ndarray = np.array([])
+
+    def _mapear_carpeta_a_etiqueta(self, nombre_carpeta: str) -> str:
+        """Convertir un nombre de carpeta (p. ej. ``A_upper``) a la etiqueta real."""
+        if nombre_carpeta.endswith("_upper"):
             return nombre_carpeta[0].upper()
-        elif nombre_carpeta.endswith('_lower'):
+        if nombre_carpeta.endswith("_lower"):
             return nombre_carpeta[0].lower()
-        else:
-            # Si no tiene sufijo, asumir que es el nombre directo
-            return nombre_carpeta
-        
-    def cargar_desde_directorio(self, tamano_imagen=None):
-        """
-        Cargar imÃƒÆ’Ã‚Â¡genes desde estructura de directorios.
-        Estructura esperada: ruta_datos/clase/imagen.png
-        
-        Args:
-            tamano_imagen (tuple): TamaÃƒÆ’Ã‚Â±o de imagen (altura, ancho)
-        """
-        if tamano_imagen is None:
-            tamano_imagen = DATA_CONFIG['tamano_imagen']
-            
-        imagenes = []
-        etiquetas = []
-        
-        for nombre_clase in os.listdir(self.ruta_datos):
+        return nombre_carpeta
+
+    def _iterar_archivos(self) -> Iterable[Tuple[str, int]]:
+        for nombre_clase in sorted(os.listdir(self.ruta_datos)):
             ruta_clase = os.path.join(self.ruta_datos, nombre_clase)
             if not os.path.isdir(ruta_clase):
                 continue
-            
-            # Mapear nombre de carpeta a etiqueta real
+
             etiqueta_real = self._mapear_carpeta_a_etiqueta(nombre_clase)
-            if etiqueta_real is None:
-                print(f"Advertencia: No se pudo mapear la carpeta '{nombre_clase}' a una etiqueta")
-                continue
-                
             indice_clase = self.mapa_etiquetas.get_index(etiqueta_real)
             if indice_clase == -1:
-                print(f"Advertencia: Etiqueta '{etiqueta_real}' no encontrada en mapa_etiquetas")
+                print(f"Advertencia: etiqueta '{etiqueta_real}' no encontrada en el mapa de etiquetas")
                 continue
-                
-            for archivo_imagen in os.listdir(ruta_clase):
-                if not archivo_imagen.lower().endswith(('.png', '.jpg', '.jpeg')):
-                    continue
-                    
-                ruta_imagen = os.path.join(ruta_clase, archivo_imagen)
-                try:
-                    img = _leer_imagen_gris(ruta_imagen, tamano_imagen)
-                    imagenes.append(img)
-                    etiquetas.append(indice_clase)
-                except Exception as e:
-                    print(f"Error cargando {ruta_imagen}: {e}")
-                    
-        self.imagenes = np.array(imagenes)
-        self.etiquetas = np.array(etiquetas)
-        
-        print(f"Cargadas {len(self.imagenes)} imÃƒÆ’Ã‚Â¡genes de {len(np.unique(self.etiquetas))} clases")
-        
-    def cargar_desde_csv(self, ruta_csv, columna_imagen='image_path', columna_etiqueta='label'):
-        """
-        Cargar datos desde archivo CSV.
-        
-        Args:
-            ruta_csv (str): Ruta al archivo CSV
-            columna_imagen (str): Nombre de la columna con rutas de imÃƒÆ’Ã‚Â¡genes
-            columna_etiqueta (str): Nombre de la columna con etiquetas
-        """
-        df = pd.read_csv(ruta_csv)
-        imagenes = []
-        etiquetas = []
-        
-        for _, fila in df.iterrows():
-            ruta_imagen = fila[columna_imagen]
-            etiqueta = fila[columna_etiqueta]
-            
-            if not os.path.isabs(ruta_imagen):
-                ruta_imagen = os.path.join(os.path.dirname(ruta_csv), ruta_imagen)
-                
-            try:
-                img = _leer_imagen_gris(ruta_imagen, DATA_CONFIG['tamano_imagen'])
-                imagenes.append(img)
-                
-                indice = self.mapa_etiquetas.get_index(etiqueta)
-                if indice == -1:
-                    print(f"Advertencia: Etiqueta '{etiqueta}' no encontrada")
-                    continue
-                etiquetas.append(indice)
-                
-            except Exception as e:
-                print(f"Error cargando {ruta_imagen}: {e}")
-                
-        self.imagenes = np.array(imagenes)
-        self.etiquetas = np.array(etiquetas)
-        
-    def preprocesar_imagenes(self):
-        """Preprocesar las imÃƒÆ’Ã‚Â¡genes cargadas."""
-        if DATA_CONFIG['normalizar']:
-            self.imagenes = normalize_image(self.imagenes)
-            
-        self.imagenes = self.imagenes.reshape(self.imagenes.shape[0], -1)
-        
 
-    def _dividir_manual(self, proporcion_entrenamiento, proporcion_validacion, semilla):
+            for archivo in sorted(os.listdir(ruta_clase)):
+                if archivo.lower().endswith((".png", ".jpg", ".jpeg", ".bmp")):
+                    yield os.path.join(ruta_clase, archivo), indice_clase
+
+    def cargar_desde_directorio(self, tamano_imagen: Optional[Tuple[int, int]] = None) -> None:
+        """Cargar todas las imágenes almacenadas en ``ruta_datos``."""
+        tamano = tamano_imagen or DATA_CONFIG["tamano_imagen"]
+        imagenes: List[np.ndarray] = []
+        etiquetas: List[int] = []
+
+        for ruta_imagen, indice in self._iterar_archivos():
+            try:
+                imagen = _leer_imagen_gris(ruta_imagen, tamano)
+            except (OSError, ValueError) as error:
+                print(f"Error cargando {ruta_imagen}: {error}")
+                continue
+            imagenes.append(imagen)
+            etiquetas.append(indice)
+
+        self.imagenes = np.array(imagenes)
+        self.etiquetas = np.array(etiquetas)
+        clases = len(np.unique(self.etiquetas)) if self.etiquetas.size else 0
+        print(f"Cargadas {len(self.imagenes)} imagenes de {clases} clases")
+
+    def cargar_desde_csv(
+        self,
+        ruta_csv: str,
+        columna_imagen: str = 'image_path',
+        columna_etiqueta: str = 'label',
+    ) -> None:
+        """Leer imágenes y etiquetas desde un CSV."""
+        dataframe = pd.read_csv(ruta_csv)
+        imagenes: List[np.ndarray] = []
+        etiquetas: List[int] = []
+
+        base_path = Path(ruta_csv).parent
+        for _, fila in dataframe.iterrows():
+            ruta_imagen = Path(fila[columna_imagen])
+            if not ruta_imagen.is_absolute():
+                ruta_imagen = base_path / ruta_imagen
+            etiqueta = fila[columna_etiqueta]
+
+            try:
+                imagen = _leer_imagen_gris(str(ruta_imagen), DATA_CONFIG['tamano_imagen'])
+            except (OSError, ValueError) as error:
+                print(f"Error cargando {ruta_imagen}: {error}")
+                continue
+
+            indice = self.mapa_etiquetas.get_index(etiqueta)
+            if indice == -1:
+                print(f"Advertencia: etiqueta '{etiqueta}' no encontrada")
+                continue
+
+            imagenes.append(imagen)
+            etiquetas.append(indice)
+
+        self.imagenes = np.array(imagenes)
+        self.etiquetas = np.array(etiquetas)
+
+    def preprocesar_imagenes(self) -> None:
+        """Normalizar y aplanar las imágenes cargadas."""
+        if DATA_CONFIG.get('normalizar', True):
+            self.imagenes = normalize_image(self.imagenes)
+        self.imagenes = self.imagenes.reshape(self.imagenes.shape[0], -1)
+
+    def _dividir_manual(
+        self,
+        proporcion_entrenamiento: float,
+        proporcion_validacion: float,
+        semilla: int,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         rng = np.random.default_rng(semilla)
         val_ratio = proporcion_validacion / (proporcion_validacion + DATA_CONFIG['division_prueba'])
-        train_idx = []
-        val_idx = []
-        test_idx = []
+
+        train_idx: List[int] = []
+        val_idx: List[int] = []
+        test_idx: List[int] = []
 
         for clase in np.unique(self.etiquetas):
             indices = np.where(self.etiquetas == clase)[0]
             rng.shuffle(indices)
-            n = len(indices)
-            n_train = int(np.floor(proporcion_entrenamiento * n))
-            n_rest = n - n_train
-            n_val = int(np.floor(val_ratio * n_rest))
-            n_test = n - n_train - n_val
+            n_total = len(indices)
+            n_train = int(np.floor(proporcion_entrenamiento * n_total))
+            n_remanente = n_total - n_train
+            n_val = int(np.floor(val_ratio * n_remanente))
+            n_test = n_total - n_train - n_val
 
             train_idx.extend(indices[:n_train])
             val_idx.extend(indices[n_train:n_train + n_val])
             test_idx.extend(indices[n_train + n_val:n_train + n_val + n_test])
 
-        rng.shuffle(train_idx)
-        rng.shuffle(val_idx)
-        rng.shuffle(test_idx)
+        for arreglo in (train_idx, val_idx, test_idx):
+            rng.shuffle(arreglo)
 
-        train_idx = np.array(train_idx, dtype=int)
-        val_idx = np.array(val_idx, dtype=int)
-        test_idx = np.array(test_idx, dtype=int)
+        train_idx_arr = np.array(train_idx, dtype=int)
+        val_idx_arr = np.array(val_idx, dtype=int)
+        test_idx_arr = np.array(test_idx, dtype=int)
 
         return (
-            self.imagenes[train_idx],
-            self.imagenes[val_idx],
-            self.imagenes[test_idx],
-            self.etiquetas[train_idx],
-            self.etiquetas[val_idx],
-            self.etiquetas[test_idx],
+            self.imagenes[train_idx_arr],
+            self.imagenes[val_idx_arr],
+            self.imagenes[test_idx_arr],
+            self.etiquetas[train_idx_arr],
+            self.etiquetas[val_idx_arr],
+            self.etiquetas[test_idx_arr],
         )
 
-    def dividir_datos(self, proporcion_entrenamiento=None, proporcion_validacion=None, semilla=42):
-        """
-        Dividir datos en entrenamiento, validacion y prueba.
-
-        Args:
-            proporcion_entrenamiento (float): Proporcion para entrenamiento
-            proporcion_validacion (float): Proporcion para validacion
-            semilla (int): Semilla para reproducibilidad
-
-        Returns:
-            tuple: (X_train, X_val, X_test, y_train, y_val, y_test)
-        """
-        if proporcion_entrenamiento is None:
-            proporcion_entrenamiento = DATA_CONFIG['division_entrenamiento']
-        if proporcion_validacion is None:
-            proporcion_validacion = DATA_CONFIG['division_validacion']
+    def dividir_datos(
+        self,
+        proporcion_entrenamiento: Optional[float] = None,
+        proporcion_validacion: Optional[float] = None,
+        semilla: int = 42,
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Dividir el conjunto cargado en train / validation / test."""
+        proporcion_entrenamiento = (
+            proporcion_entrenamiento or DATA_CONFIG['division_entrenamiento']
+        )
+        proporcion_validacion = (
+            proporcion_validacion or DATA_CONFIG['division_validacion']
+        )
 
         if train_test_split is None:
             return self._dividir_manual(proporcion_entrenamiento, proporcion_validacion, semilla)
 
         X_train, X_temp, y_train, y_temp = train_test_split(
-            self.imagenes, self.etiquetas,
+            self.imagenes,
+            self.etiquetas,
             train_size=proporcion_entrenamiento,
             random_state=semilla,
-            stratify=self.etiquetas
+            stratify=self.etiquetas,
         )
 
-        proporcion_val = proporcion_validacion / (proporcion_validacion + DATA_CONFIG['division_prueba'])
+        proporcion_val = proporcion_validacion / (
+            proporcion_validacion + DATA_CONFIG['division_prueba']
+        )
         X_val, X_test, y_val, y_test = train_test_split(
-            X_temp, y_temp,
+            X_temp,
+            y_temp,
             train_size=proporcion_val,
             random_state=semilla,
-            stratify=y_temp
+            stratify=y_temp,
         )
 
         return X_train, X_val, X_test, y_train, y_val, y_test
 
-    def aplicar_augmentacion(self, X_train, y_train, factor=2):
-        """Aplicar augmentacion de datos."""
-        if not DATA_CONFIG['usar_augmentacion']:
+    def aplicar_augmentacion(
+        self,
+        X_train: np.ndarray,
+        y_train: np.ndarray,
+        factor: int = 2,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Generar copias augmentadas de ``X_train`` y ``y_train``."""
+        if not DATA_CONFIG.get('usar_augmentacion', False):
             return X_train, y_train
 
-        imagenes_aug = []
-        etiquetas_aug = []
+        imagenes_aug: List[np.ndarray] = []
+        etiquetas_aug: List[int] = []
 
-        for i in range(len(X_train)):
-            imagen_original = X_train[i]
-            etiqueta = y_train[i]
-
+        for imagen_original, etiqueta in zip(X_train, y_train):
             imagenes_aug.append(imagen_original)
-            etiquetas_aug.append(etiqueta)
+            etiquetas_aug.append(int(etiqueta))
+            for _ in range(max(factor - 1, 0)):
+                imagen_aug = self._augmentacion_simple(
+                    imagen_original.reshape(DATA_CONFIG['tamano_imagen'])
+                )
+                imagenes_aug.append(imagen_aug.flatten())
+                etiquetas_aug.append(int(etiqueta))
 
-            for _ in range(factor - 1):
-                img_2d = imagen_original.reshape(DATA_CONFIG['tamano_imagen'])
-                img_aug = self._augmentacion_simple(img_2d)
-                img_flat = img_aug.flatten()
-                if len(img_flat) == len(imagen_original):
-                    imagenes_aug.append(img_flat)
-                    etiquetas_aug.append(etiqueta)
-
-        total_original = len(X_train)
-        total_augmentado = len(imagenes_aug)
-        print(f"Augmentacion completa: {total_original} -> {total_augmentado} imagenes")
+        print(
+            "Augmentacion completa: "
+            f"{len(X_train)} -> {len(imagenes_aug)} imagenes"
+        )
 
         return np.array(imagenes_aug), np.array(etiquetas_aug)
 
-    def _augmentacion_simple(self, imagen_2d):
-        """
-        Aplicar augmentaciÃƒÆ’Ã‚Â³n simple a una imagen 2D.
-        
-        Args:
-            imagen_2d: Imagen en formato 2D (altura, ancho)
-            
-        Returns:
-            np.array: Imagen augmentada del mismo tamaÃƒÆ’Ã‚Â±o
-        """
-        img = imagen_2d.copy().astype(np.float32)
-        
-        # Agregar ruido gaussiano suave
+    def _augmentacion_simple(self, imagen_2d: np.ndarray) -> np.ndarray:
+        """Crear una variante sencilla de ``imagen_2d``."""
+        imagen = imagen_2d.astype(np.float32).copy()
+
         if np.random.random() > 0.5:
-            ruido = np.random.normal(0, 0.05, img.shape)
-            img = np.clip(img + ruido, 0, 1)
-        
-        # Desplazamiento pequeÃƒÆ’Ã‚Â±o (circular)
+            ruido = np.random.normal(0, 0.05, imagen.shape)
+            imagen = np.clip(imagen + ruido, 0, 1)
+
         if np.random.random() > 0.5:
             shift_x = np.random.randint(-2, 3)
             shift_y = np.random.randint(-2, 3)
-            img = np.roll(img, shift_x, axis=1)
-            img = np.roll(img, shift_y, axis=0)
-        
-        # Multiplicar por un factor aleatorio pequeÃƒÆ’Ã‚Â±o
+            imagen = np.roll(imagen, shift_x, axis=1)
+            imagen = np.roll(imagen, shift_y, axis=0)
+
         if np.random.random() > 0.5:
             factor = np.random.uniform(0.9, 1.1)
-            img = np.clip(img * factor, 0, 1)
-        
-        return img
-        
-    def obtener_pesos_clase(self):
-        """Calcular pesos de clases para datos desbalanceados."""
-        from sklearn.utils.class_weight import compute_class_weight
-        
+            imagen = np.clip(imagen * factor, 0, 1)
+
+        return imagen
+
+    def obtener_pesos_clase(self) -> dict:
+        """Calcular pesos balanceados para cada clase."""
+        from sklearn.utils.class_weight import compute_class_weight  # type: ignore
+
         clases = np.unique(self.etiquetas)
         pesos = compute_class_weight('balanced', classes=clases, y=self.etiquetas)
         return dict(zip(clases, pesos))

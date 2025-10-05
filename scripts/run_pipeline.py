@@ -1,6 +1,5 @@
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Dict
@@ -21,6 +20,7 @@ from src.trainer import (
 
 
 def _formatear_metricas(metricas: Dict[str, Dict[str, float]]) -> str:
+    """Formatear metricas en texto legible."""
     lineas = []
     for split, valores in metricas.items():
         loss = valores.get('loss', float('nan'))
@@ -30,6 +30,7 @@ def _formatear_metricas(metricas: Dict[str, Dict[str, float]]) -> str:
 
 
 def _analizar_confusiones(modelo, limite_por_split: int = 5):
+    """Devolver las clases con menor precision por particion."""
     num_clases = DEFAULT_LABEL_MAP.get_num_classes()
     X_train, X_val, X_test, y_train, y_val, y_test = preparar_datos(aplicar_augmentacion=False)
 
@@ -72,6 +73,7 @@ def _analizar_confusiones(modelo, limite_por_split: int = 5):
 
 
 def main():
+    """Ejecutar el pipeline completo desde la linea de comandos."""
     parser = argparse.ArgumentParser(description="Pipeline unificado de entrenamiento y evaluacion")
     parser.add_argument('--force', action='store_true', help='Reentrenar aunque exista un modelo guardado')
     parser.add_argument('--skip-train', action='store_true', help='Omitir entrenamiento y usar el modelo existente')
