@@ -14,24 +14,25 @@ This repo ships a NumPy-based multilayer perceptron (784 ➜ 512 ➜ 256 ➜ 128
 ## Requirements
 
 - Python 3.8+
-- Packages listed in equirements.txt (NumPy required; OpenCV / scikit-learn optional).
+- Packages listed in 
+equirements.txt (NumPy required; OpenCV / scikit-learn optional).
 
 ## Quick Start
 
-`ash
+```
 git clone https://github.com/ZaoGabo/custom-char-recognition.git
 cd custom-char-recognition
 python -m venv venv
 venv\Scripts\activate  # or source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
-`
+```
 
 ## Train & Evaluate
 
 1. Place samples under data/raw/<letter>_<upper|lower>/. Any PNG/JPG/JPEG/BMP works; pictures are resized to 28×28.
 2. Run the pipeline:
-   `ash
+   `
    python scripts/run_pipeline.py --force --confusion-report --limit 5
    `
    - Generates synthetic data if data/raw is empty.
@@ -45,7 +46,7 @@ Drop your real samples into data/raw/ and re-run the pipeline. You may also use 
 
 ## Streamlit Demo
 
-`ash
+`
 streamlit run demo/app.py
 `
 The app performs preprocessing, displays top-5 predictions, and reads the pickle stored under models/.
