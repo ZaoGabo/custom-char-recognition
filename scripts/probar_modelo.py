@@ -2,183 +2,84 @@
 Script para probar el modelo entrenado de reconocimiento de caracteres.
 """
 
+import argparse
 import os
 import pickle
+from pathlib import Path
+
 import numpy as np
 from PIL import Image
-import sys
 
-# Agregar src al path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-src_dir = os.path.join(parent_dir, 'src')
-sys.path.insert(0, src_dir)
+from src.config import PATHS, DATA_CONFIG
+from src.label_map import DEFAULT_LABEL_MAP
+from src.data_loader import DataLoader
 
-from config import PATHS, DATA_CONFIG
-from label_map import DEFAULT_LABEL_MAP
 
-def cargar_modelo():
-    """Cargar el modelo entrenado."""
-    modelo_path = os.path.join(PATHS['modelos'], "modelo_entrenado.pkl")
-    
-    if not os.path.exists(modelo_path):
-        print("❌ No se encontró el modelo entrenado.")
-        print("Ejecute primero: python src/trainer.py")
-        return None
-    
-    with open(modelo_path, 'rb') as f:
-        modelo = pickle.load(f)
-    
-    print("✅ Modelo cargado exitosamente")
-    print(f"   - Neuronas de entrada: {modelo.entrada_neuronas}")
-    print(f"   - Neuronas ocultas: {modelo.oculta_neuronas}")
-    print(f"   - Neuronas de salida: {modelo.salida_neuronas}")
-    return modelo
+def cargar_modelo(modelo_path: Path):
+    if not modelo_path.exists():
+        raise FileNotFoundError("No se encontro el modelo entrenado. Ejecute `python -m src.trainer --force`.")
+    with modelo_path.open('rb') as f:
+        return pickle.load(f)
 
-def predecir_imagen(modelo, ruta_imagen):
-    """
-    Predecir el carácter de una imagen.
-    
-    Args:
-        modelo: Modelo de red neuronal cargado
-        ruta_imagen: Ruta a la imagen a predecir
-        
-    Returns:
-        dict: Resultado de la predicción
-    """
-    try:
-        # Cargar y procesar imagen
-        img = Image.open(ruta_imagen).convert('L')  # Escala de grises
-        img = img.resize(DATA_CONFIG['tamano_imagen'])  # Redimensionar a 28x28
-        
-        # Normalizar píxeles a [0, 1]
-        img_array = np.array(img) / 255.0
-        img_flat = img_array.flatten()  # Aplanar a 1D
-        
-        # Hacer predicción
-        salidas = modelo.predecir(img_flat)
-        
-        # Encontrar la clase con mayor probabilidad
-        indice_predicho = np.argmax(salidas)
-        confianza = salidas[indice_predicho]
-        etiqueta_predicha = DEFAULT_LABEL_MAP.get_label(indice_predicho)
-        
-        return {
-            'etiqueta': etiqueta_predicha,
-            'indice': indice_predicho,
-            'confianza': float(confianza),
-            'probabilidades': salidas.flatten()
-        }
-    
-    except Exception as e:
-        print(f"❌ Error procesando imagen {ruta_imagen}: {str(e)}")
-        return None
 
-def probar_con_imagenes_muestra():
-    """Probar el modelo con algunas imágenes de muestra."""
-    print("🧪 Probando modelo con imágenes de muestra...")
-    
-    modelo = cargar_modelo()
-    if modelo is None:
-        return
-    
-    # Buscar algunas imágenes de ejemplo
-    data_raw = PATHS['datos_crudos']
-    imagenes_probadas = 0
-    aciertos = 0
-    
-    for carpeta in os.listdir(data_raw)[:10]:  # Solo las primeras 10 carpetas
-        carpeta_path = os.path.join(data_raw, carpeta)
-        if not os.path.isdir(carpeta_path):
-            continue
-            
-        # Obtener la etiqueta real de la carpeta
-        if carpeta.endswith('_upper'):
-            etiqueta_real = carpeta[0].upper()
-        elif carpeta.endswith('_lower'):
-            etiqueta_real = carpeta[0].lower()
-        else:
-            etiqueta_real = carpeta
-        
-        # Tomar la primera imagen de la carpeta
-        archivos = [f for f in os.listdir(carpeta_path) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-        if not archivos:
-            continue
-            
-        imagen_path = os.path.join(carpeta_path, archivos[0])
-        resultado = predecir_imagen(modelo, imagen_path)
-        
-        if resultado:
-            imagenes_probadas += 1
-            es_correcto = resultado['etiqueta'] == etiqueta_real
-            if es_correcto:
-                aciertos += 1
-            
-            print(f"📁 {carpeta} → Esperado: '{etiqueta_real}' | Predicho: '{resultado['etiqueta']}' | Confianza: {resultado['confianza']:.3f} | {'✅' if es_correcto else '❌'}")
-    
-    if imagenes_probadas > 0:
-        accuracy = aciertos / imagenes_probadas
-        print(f"\\n📊 Resultados de la prueba:")
-        print(f"   - Imágenes probadas: {imagenes_probadas}")
-        print(f"   - Aciertos: {aciertos}")
-        print(f"   - Accuracy: {accuracy:.3f} ({accuracy*100:.1f}%)")
+def preprocesar_imagen(modelo, ruta_imagen: Path) -> np.ndarray:
+    imagen = Image.open(ruta_imagen).convert('L')
+    imagen = imagen.resize(DATA_CONFIG['tamano_imagen'])
+    arr = np.array(imagen, dtype=np.float32).flatten() / 255.0
+    return arr
 
-def mostrar_distribución_clases():
-    """Mostrar la distribución de clases en los datos."""
-    print("\\n📊 Distribución de clases en los datos:")
-    
-    data_raw = PATHS['datos_crudos']
-    conteos = {}
-    
-    for carpeta in os.listdir(data_raw):
-        carpeta_path = os.path.join(data_raw, carpeta)
-        if not os.path.isdir(carpeta_path) or carpeta.startswith('.'):
-            continue
-            
-        # Contar imágenes
-        archivos = [f for f in os.listdir(carpeta_path) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-        
-        # Obtener etiqueta
-        if carpeta.endswith('_upper'):
-            etiqueta = carpeta[0].upper()
-        elif carpeta.endswith('_lower'):
-            etiqueta = carpeta[0].lower()
-        else:
-            etiqueta = carpeta
-            
-        conteos[etiqueta] = len(archivos)
-    
-    # Mostrar conteos organizados
-    print("\\nMayúsculas:")
-    for letra in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
-        if letra in conteos:
-            print(f"   {letra}: {conteos[letra]} imágenes")
-    
-    print("\\nMinúsculas:")
-    for letra in 'abcdefghijklmnopqrstuvwxyz':
-        if letra in conteos:
-            print(f"   {letra}: {conteos[letra]} imágenes")
-    
-    total = sum(conteos.values())
-    print(f"\\nTotal: {total} imágenes en {len(conteos)} clases")
+
+def obtener_probabilidades(modelo, entrada: np.ndarray) -> np.ndarray:
+    if hasattr(modelo, 'predecir_probabilidades'):
+        salida = modelo.predecir_probabilidades(entrada)
+        return salida if salida.ndim == 2 else salida.reshape(1, -1)
+    salida = modelo.predecir(entrada)
+    return salida if salida.ndim == 2 else salida.reshape(1, -1)
+
+
+def evaluar_modelo(modelo, limite: int = 0):
+    loader = DataLoader(PATHS['datos_crudos'], mapa_etiquetas=DEFAULT_LABEL_MAP)
+    loader.cargar_desde_directorio()
+    loader.preprocesar_imagenes()
+
+    X = loader.imagenes.astype(np.float32)
+    y = loader.etiquetas
+
+    if limite > 0:
+        X = X[:limite]
+        y = y[:limite]
+
+    probs = obtener_probabilidades(modelo, X)
+    preds = np.argmax(probs, axis=1)
+    accuracy = float(np.mean(preds == y))
+
+    return accuracy, preds, y
+
 
 def main():
-    """Función principal de prueba."""
-    print("=" * 60)
-    print("🧪 PRUEBA DEL MODELO DE RECONOCIMIENTO DE CARACTERES")
-    print("=" * 60)
-    
-    # Mostrar información del dataset
-    mostrar_distribución_clases()
-    
-    print("\\n" + "=" * 60)
-    
-    # Probar modelo
-    probar_con_imagenes_muestra()
-    
-    print("\\n" + "=" * 60)
-    print("✅ Prueba completada")
-    print("💡 Para usar la aplicación web: streamlit run demo/app.py")
+    parser = argparse.ArgumentParser(description="Probar el modelo entrenado de reconocimiento de caracteres")
+    parser.add_argument('--limite', type=int, default=0, help='Numero maximo de ejemplos a evaluar (0 = todos)')
+    args = parser.parse_args()
 
-if __name__ == "__main__":
+    modelo_path = Path(PATHS['modelos']) / "modelo_entrenado.pkl"
+    modelo = cargar_modelo(modelo_path)
+    accuracy, preds, y = evaluar_modelo(modelo, args.limite)
+
+    print("Resultados de la prueba:")
+    print(f"  accuracy: {accuracy:.4f}")
+    print(f"  muestras: {len(y)}")
+
+    if len(y) > 0:
+        errores = np.where(preds != y)[0][:10]
+        if len(errores) > 0:
+            print("  Ejemplos fallidos (max 10):")
+            for idx in errores:
+                real = DEFAULT_LABEL_MAP.get_label(int(y[idx]))
+                pred = DEFAULT_LABEL_MAP.get_label(int(preds[idx]))
+                print(f"    indice {idx}: real={real} pred={pred}")
+        else:
+            print("  Sin errores en la muestra evaluada")
+
+
+if __name__ == '__main__':
     main()

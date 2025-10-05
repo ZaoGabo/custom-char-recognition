@@ -3,11 +3,10 @@ Funciones auxiliares para el proyecto.
 """
 
 import numpy as np
-import cv2
 from PIL import Image, ImageEnhance, ImageOps
 from .config import AUGMENTATION_CONFIG
 
-# Adaptador de claves en español
+# Adaptador de claves en espaÃ±ol
 AUG = {
     'rotation_range': AUGMENTATION_CONFIG['rango_rotacion'],
     'width_shift_range': AUGMENTATION_CONFIG['desplazamiento_horizontal'],
@@ -18,21 +17,21 @@ AUG = {
 }
 
 def normalize_image(images):
-    """Normalizar imágenes al rango [0, 1]."""
+    """Normalizar imÃ¡genes al rango [0, 1]."""
     return images.astype(np.float32) / 255.0
 
 def denormalize_image(images):
-    """Desnormalizar imágenes al rango [0, 255]."""
+    """Desnormalizar imÃ¡genes al rango [0, 255]."""
     return (images * 255).astype(np.uint8)
 
 def apply_augmentation(image):
-    """Aplicar augmentación de datos a una imagen."""
+    """Aplicar augmentaciÃ³n de datos a una imagen."""
     if len(image.shape) == 2:
         pil_img = Image.fromarray(image, mode='L')
     else:
         pil_img = Image.fromarray(image)
 
-    # Rotación
+    # RotaciÃ³n
     if AUG['rotation_range'] > 0:
         angle = np.random.uniform(-AUG['rotation_range'], AUG['rotation_range'])
         pil_img = pil_img.rotate(angle, fillcolor=0)
@@ -82,7 +81,7 @@ def apply_augmentation(image):
     return np.array(pil_img)
 
 def plot_images(images, labels, label_map, num_images=16, figsize=(12, 8)):
-    """Visualizar imágenes con sus etiquetas."""
+    """Visualizar imÃ¡genes con sus etiquetas."""
     import matplotlib.pyplot as plt
     fig, axes = plt.subplots(4, 4, figsize=figsize)
     axes = axes.ravel()
@@ -97,7 +96,7 @@ def plot_images(images, labels, label_map, num_images=16, figsize=(12, 8)):
     plt.show()
 
 def save_predictions_plot(images, true_labels, pred_labels, label_map, filepath, num_images=16):
-    """Guardar gráfico de predicciones."""
+    """Guardar grÃ¡fico de predicciones."""
     import matplotlib.pyplot as plt
     fig, axes = plt.subplots(4, 4, figsize=(12, 10))
     axes = axes.ravel()
@@ -117,17 +116,17 @@ def save_predictions_plot(images, true_labels, pred_labels, label_map, filepath,
     plt.close()
 
 def calculate_accuracy(y_true, y_pred):
-    """Calcular precisión (accuracy)."""
+    """Calcular precisiÃ³n (accuracy)."""
     return np.mean(y_true == y_pred)
 
 def print_classification_report(y_true, y_pred, label_map):
-    """Imprimir reporte de clasificación."""
+    """Imprimir reporte de clasificaciÃ³n."""
     from sklearn.metrics import classification_report, confusion_matrix
     class_names = [label_map.get_label(i) for i in range(label_map.get_num_classes())]
 
-    print("Reporte de Clasificación:")
+    print("Reporte de ClasificaciÃ³n:")
     print(classification_report(y_true, y_pred, target_names=class_names))
 
-    print("\nMatriz de Confusión:")
+    print("\nMatriz de ConfusiÃ³n:")
     cm = confusion_matrix(y_true, y_pred)
     print(cm)

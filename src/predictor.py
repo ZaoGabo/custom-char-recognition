@@ -1,8 +1,14 @@
-import numpy
-from label_map import index_to_label
+import numpy as np
+
+from src.label_map import DEFAULT_LABEL_MAP
+
 
 def normalizar_entrada(valores):
-    return (numpy.asarray(valores, dtype=float) / 255.0 * 0.99) + 0.01
+    arr = np.asarray(valores, dtype=np.float32)
+    if arr.max() > 1.0:
+        arr = arr / 255.0
+    return arr
+
 
 def evaluar_red(red, datos_prueba):
     aciertos = []
@@ -10,13 +16,13 @@ def evaluar_red(red, datos_prueba):
     for registro in datos_prueba:
         valores = registro.strip().split(',')
         etiqueta_correcta = valores[0]
-        entrada = normalizar_entrada(valores[1:])
-        salida = red.predecir(entrada)
-        indice_predicho = numpy.argmax(salida)
-        etiqueta_predicha = index_to_label(indice_predicho)
+        entrada = normalizar_entrada([float(v) for v in valores[1:]])
+        salida = red.predecir_probabilidades(entrada)
+        indice_predicho = int(np.argmax(salida))
+        etiqueta_predicha = DEFAULT_LABEL_MAP.get_label(indice_predicho)
 
         aciertos.append(int(etiqueta_predicha == etiqueta_correcta))
 
-    rendimiento = numpy.asarray(aciertos).mean()
+    rendimiento = float(np.mean(aciertos))
     print("Rendimiento =", rendimiento)
     return rendimiento

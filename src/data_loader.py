@@ -3,14 +3,33 @@ Carga y preprocesamiento de datos.
 """
 
 import os
-import cv2
+try:
+    import cv2  # type: ignore
+except ImportError:
+    cv2 = None
 import numpy as np
 import pandas as pd
 from PIL import Image
-from sklearn.model_selection import train_test_split
+from typing import Tuple
+try:
+    from sklearn.model_selection import train_test_split
+except ImportError:
+    train_test_split = None
 from .config import DATA_CONFIG
 from .label_map import LabelMap, DEFAULT_LABEL_MAP
 from .utils import normalize_image, apply_augmentation
+
+def _leer_imagen_gris(ruta_imagen: str, tamano: Tuple[int, int]) -> np.ndarray:
+    alto, ancho = tamano
+    if cv2 is not None:
+        img = cv2.imread(ruta_imagen, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            raise ValueError(f"No se pudo cargar la imagen {ruta_imagen}")
+        return cv2.resize(img, (ancho, alto))
+    img = Image.open(ruta_imagen).convert('L')
+    img = img.resize((ancho, alto))
+    return np.array(img, dtype=np.uint8)
+
 
 class DataLoader:
     def __init__(self, ruta_datos, mapa_etiquetas=None):
@@ -46,11 +65,11 @@ class DataLoader:
         
     def cargar_desde_directorio(self, tamano_imagen=None):
         """
-        Cargar imágenes desde estructura de directorios.
+        Cargar imÃƒÆ’Ã‚Â¡genes desde estructura de directorios.
         Estructura esperada: ruta_datos/clase/imagen.png
         
         Args:
-            tamano_imagen (tuple): Tamaño de imagen (altura, ancho)
+            tamano_imagen (tuple): TamaÃƒÆ’Ã‚Â±o de imagen (altura, ancho)
         """
         if tamano_imagen is None:
             tamano_imagen = DATA_CONFIG['tamano_imagen']
@@ -80,8 +99,7 @@ class DataLoader:
                     
                 ruta_imagen = os.path.join(ruta_clase, archivo_imagen)
                 try:
-                    img = cv2.imread(ruta_imagen, cv2.IMREAD_GRAYSCALE)
-                    img = cv2.resize(img, tamano_imagen)
+                    img = _leer_imagen_gris(ruta_imagen, tamano_imagen)
                     imagenes.append(img)
                     etiquetas.append(indice_clase)
                 except Exception as e:
@@ -90,7 +108,7 @@ class DataLoader:
         self.imagenes = np.array(imagenes)
         self.etiquetas = np.array(etiquetas)
         
-        print(f"Cargadas {len(self.imagenes)} imágenes de {len(np.unique(self.etiquetas))} clases")
+        print(f"Cargadas {len(self.imagenes)} imÃƒÆ’Ã‚Â¡genes de {len(np.unique(self.etiquetas))} clases")
         
     def cargar_desde_csv(self, ruta_csv, columna_imagen='image_path', columna_etiqueta='label'):
         """
@@ -98,7 +116,7 @@ class DataLoader:
         
         Args:
             ruta_csv (str): Ruta al archivo CSV
-            columna_imagen (str): Nombre de la columna con rutas de imágenes
+            columna_imagen (str): Nombre de la columna con rutas de imÃƒÆ’Ã‚Â¡genes
             columna_etiqueta (str): Nombre de la columna con etiquetas
         """
         df = pd.read_csv(ruta_csv)
@@ -113,8 +131,7 @@ class DataLoader:
                 ruta_imagen = os.path.join(os.path.dirname(ruta_csv), ruta_imagen)
                 
             try:
-                img = cv2.imread(ruta_imagen, cv2.IMREAD_GRAYSCALE)
-                img = cv2.resize(img, DATA_CONFIG['tamano_imagen'])
+                img = _leer_imagen_gris(ruta_imagen, DATA_CONFIG['tamano_imagen'])
                 imagenes.append(img)
                 
                 indice = self.mapa_etiquetas.get_index(etiqueta)
@@ -130,21 +147,59 @@ class DataLoader:
         self.etiquetas = np.array(etiquetas)
         
     def preprocesar_imagenes(self):
-        """Preprocesar las imágenes cargadas."""
+        """Preprocesar las imÃƒÆ’Ã‚Â¡genes cargadas."""
         if DATA_CONFIG['normalizar']:
             self.imagenes = normalize_image(self.imagenes)
             
         self.imagenes = self.imagenes.reshape(self.imagenes.shape[0], -1)
         
+
+    def _dividir_manual(self, proporcion_entrenamiento, proporcion_validacion, semilla):
+        rng = np.random.default_rng(semilla)
+        val_ratio = proporcion_validacion / (proporcion_validacion + DATA_CONFIG['division_prueba'])
+        train_idx = []
+        val_idx = []
+        test_idx = []
+
+        for clase in np.unique(self.etiquetas):
+            indices = np.where(self.etiquetas == clase)[0]
+            rng.shuffle(indices)
+            n = len(indices)
+            n_train = int(np.floor(proporcion_entrenamiento * n))
+            n_rest = n - n_train
+            n_val = int(np.floor(val_ratio * n_rest))
+            n_test = n - n_train - n_val
+
+            train_idx.extend(indices[:n_train])
+            val_idx.extend(indices[n_train:n_train + n_val])
+            test_idx.extend(indices[n_train + n_val:n_train + n_val + n_test])
+
+        rng.shuffle(train_idx)
+        rng.shuffle(val_idx)
+        rng.shuffle(test_idx)
+
+        train_idx = np.array(train_idx, dtype=int)
+        val_idx = np.array(val_idx, dtype=int)
+        test_idx = np.array(test_idx, dtype=int)
+
+        return (
+            self.imagenes[train_idx],
+            self.imagenes[val_idx],
+            self.imagenes[test_idx],
+            self.etiquetas[train_idx],
+            self.etiquetas[val_idx],
+            self.etiquetas[test_idx],
+        )
+
     def dividir_datos(self, proporcion_entrenamiento=None, proporcion_validacion=None, semilla=42):
         """
-        Dividir datos en entrenamiento, validación y prueba.
-        
+        Dividir datos en entrenamiento, validacion y prueba.
+
         Args:
-            proporcion_entrenamiento (float): Proporción para entrenamiento
-            proporcion_validacion (float): Proporción para validación
+            proporcion_entrenamiento (float): Proporcion para entrenamiento
+            proporcion_validacion (float): Proporcion para validacion
             semilla (int): Semilla para reproducibilidad
-            
+
         Returns:
             tuple: (X_train, X_val, X_test, y_train, y_val, y_test)
         """
@@ -152,14 +207,17 @@ class DataLoader:
             proporcion_entrenamiento = DATA_CONFIG['division_entrenamiento']
         if proporcion_validacion is None:
             proporcion_validacion = DATA_CONFIG['division_validacion']
-            
+
+        if train_test_split is None:
+            return self._dividir_manual(proporcion_entrenamiento, proporcion_validacion, semilla)
+
         X_train, X_temp, y_train, y_temp = train_test_split(
-            self.imagenes, self.etiquetas, 
-            train_size=proporcion_entrenamiento, 
+            self.imagenes, self.etiquetas,
+            train_size=proporcion_entrenamiento,
             random_state=semilla,
             stratify=self.etiquetas
         )
-        
+
         proporcion_val = proporcion_validacion / (proporcion_validacion + DATA_CONFIG['division_prueba'])
         X_val, X_test, y_val, y_test = train_test_split(
             X_temp, y_temp,
@@ -167,67 +225,47 @@ class DataLoader:
             random_state=semilla,
             stratify=y_temp
         )
-        
+
         return X_train, X_val, X_test, y_train, y_val, y_test
-        
+
     def aplicar_augmentacion(self, X_train, y_train, factor=2):
-        """
-        Aplicar augmentación de datos.
-        
-        Args:
-            X_train: Datos de entrenamiento
-            y_train: Etiquetas de entrenamiento  
-            factor: Cuántas veces duplicar cada imagen
-            
-        Returns:
-            tuple: (X_augmented, y_augmented)
-        """
+        """Aplicar augmentacion de datos."""
         if not DATA_CONFIG['usar_augmentacion']:
             return X_train, y_train
-        
-        print(f"🔄 Aplicando augmentación con factor {factor}...")
-        
+
         imagenes_aug = []
         etiquetas_aug = []
-        
+
         for i in range(len(X_train)):
-            # Imagen original (ya aplanada)
             imagen_original = X_train[i]
             etiqueta = y_train[i]
-            
-            # Agregar imagen original
+
             imagenes_aug.append(imagen_original)
             etiquetas_aug.append(etiqueta)
-            
-            # Generar versiones augmentadas
+
             for _ in range(factor - 1):
-                # Reshape para augmentación (convertir de 1D a 2D)
                 img_2d = imagen_original.reshape(DATA_CONFIG['tamano_imagen'])
-                
-                # Aplicar augmentación simple
                 img_aug = self._augmentacion_simple(img_2d)
-                
-                # Volver a aplanar y asegurar que tiene el mismo tamaño
                 img_flat = img_aug.flatten()
                 if len(img_flat) == len(imagen_original):
                     imagenes_aug.append(img_flat)
                     etiquetas_aug.append(etiqueta)
-        
+
         total_original = len(X_train)
         total_augmentado = len(imagenes_aug)
-        print(f"✅ Augmentación completa: {total_original} → {total_augmentado} imágenes")
-        
+        print(f"Augmentacion completa: {total_original} -> {total_augmentado} imagenes")
+
         return np.array(imagenes_aug), np.array(etiquetas_aug)
-    
+
     def _augmentacion_simple(self, imagen_2d):
         """
-        Aplicar augmentación simple a una imagen 2D.
+        Aplicar augmentaciÃƒÆ’Ã‚Â³n simple a una imagen 2D.
         
         Args:
             imagen_2d: Imagen en formato 2D (altura, ancho)
             
         Returns:
-            np.array: Imagen augmentada del mismo tamaño
+            np.array: Imagen augmentada del mismo tamaÃƒÆ’Ã‚Â±o
         """
         img = imagen_2d.copy().astype(np.float32)
         
@@ -236,14 +274,14 @@ class DataLoader:
             ruido = np.random.normal(0, 0.05, img.shape)
             img = np.clip(img + ruido, 0, 1)
         
-        # Desplazamiento pequeño (circular)
+        # Desplazamiento pequeÃƒÆ’Ã‚Â±o (circular)
         if np.random.random() > 0.5:
             shift_x = np.random.randint(-2, 3)
             shift_y = np.random.randint(-2, 3)
             img = np.roll(img, shift_x, axis=1)
             img = np.roll(img, shift_y, axis=0)
         
-        # Multiplicar por un factor aleatorio pequeño
+        # Multiplicar por un factor aleatorio pequeÃƒÆ’Ã‚Â±o
         if np.random.random() > 0.5:
             factor = np.random.uniform(0.9, 1.1)
             img = np.clip(img * factor, 0, 1)

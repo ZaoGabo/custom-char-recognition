@@ -1,19 +1,27 @@
 """
-Configuración global del proyecto de reconocimiento de caracteres personalizados.
+Configuracion global del proyecto de reconocimiento de caracteres personalizados.
 """
 
-# Parámetros de la red neuronal
+# Parametros de la red neuronal
 NETWORK_CONFIG = {
-    'entrada_neuronas': 784,         # 28x28 píxeles
-    'oculta_neuronas': 128,          # Puedes ajustar según rendimiento
-    'salida_neuronas': 52,           # Número de clases (A-Z, a-z)
+    'capas': [784, 512, 256, 128, 52],
+    'activaciones': ['relu', 'relu', 'relu', 'softmax'],
     'tasa_aprendizaje': 0.001,
-    'epocas': 100,
-    'tamano_lote': 32,
-    'funcion_activacion': 'sigmoide'  # Actualmente fija en la clase
+    'lambda_l2': 0.0005,
+    'dropout_rate': 0.2,
+    'epocas': 120,
+    'tamano_lote': 64,
+    'beta1': 0.9,
+    'beta2': 0.999,
+    'epsilon': 1e-8,
+    # Compatibilidad con scripts antiguos
+    'entrada_neuronas': 784,
+    'oculta_neuronas': 128,
+    'salida_neuronas': 52,
+    'funcion_activacion': 'sigmoide',
 }
 
-# Parámetros de preprocesamiento
+# Parametros de preprocesamiento
 DATA_CONFIG = {
     'tamano_imagen': (28, 28),
     'normalizar': True,
@@ -21,10 +29,10 @@ DATA_CONFIG = {
     'division_entrenamiento': 0.8,
     'division_validacion': 0.1,
     'division_prueba': 0.1,
-    'semilla': 42  # Para reproducibilidad
+    'semilla': 42
 }
 
-# Parámetros de augmentación
+# Parametros de aumentacion
 AUGMENTATION_CONFIG = {
     'rango_rotacion': 15,
     'desplazamiento_horizontal': 0.1,
@@ -43,10 +51,11 @@ PATHS = {
     'registros': 'output/logs/'
 }
 
-# Configuración de logging
+# Configuracion de logging
 LOGGING_CONFIG = {
     'nivel': 'INFO',
     'formato': '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     'archivo': 'output/logs/entrenamiento.log'
 }
 CUSTOM_LABELS = [chr(i) for i in range(ord('A'), ord('Z') + 1)] + [chr(i) for i in range(ord('a'), ord('z') + 1)]
+
