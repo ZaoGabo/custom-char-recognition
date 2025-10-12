@@ -21,9 +21,7 @@ def _leaky_relu(x: np.ndarray, alpha: float = 0.01) -> np.ndarray:
 
 
 def _leaky_relu_derivative(x: np.ndarray, alpha: float = 0.01) -> np.ndarray:
-    grad = np.ones_like(x)
-    grad[x < 0.0] = alpha
-    return grad
+    return np.where(x > 0.0, 1.0, alpha).astype(np.float32)
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
