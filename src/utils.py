@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 from PIL import Image, ImageOps
+import matplotlib.pyplot as plt
+from sklearn.metrics import classification_report, confusion_matrix
 
 from .config import AUGMENTATION_CONFIG
 
@@ -77,8 +79,6 @@ def apply_augmentation(image: np.ndarray) -> np.ndarray:
 
 def plot_images(images, labels, label_map, num_images: int = 16, figsize=(12, 8)) -> None:
     """Visualizar imagenes con sus etiquetas verdaderas."""
-    import matplotlib.pyplot as plt
-
     fig, axes = plt.subplots(4, 4, figsize=figsize)
     ejes = axes.ravel()
     for i in range(min(num_images, len(images))):
@@ -92,8 +92,6 @@ def plot_images(images, labels, label_map, num_images: int = 16, figsize=(12, 8)
 
 def save_predictions_plot(images, true_labels, pred_labels, label_map, filepath, num_images: int = 16) -> None:
     """Guardar un grid con predicciones vs etiquetas reales."""
-    import matplotlib.pyplot as plt
-
     fig, axes = plt.subplots(4, 4, figsize=(12, 10))
     ejes = axes.ravel()
     for i in range(min(num_images, len(images))):
@@ -116,8 +114,6 @@ def calculate_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 def print_classification_report(y_true: np.ndarray, y_pred: np.ndarray, label_map) -> None:
     """Imprimir reporte de clasificacion y matriz de confusion."""
-    from sklearn.metrics import classification_report, confusion_matrix  # pragma: no cover
-
     class_names = [label_map.get_label(i) for i in range(label_map.get_num_classes())]
     print('Reporte de Clasificacion:')
     print(classification_report(y_true, y_pred, target_names=class_names))
