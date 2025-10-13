@@ -50,7 +50,7 @@ _ACTIVACIONES = {
 
 
 class NeuralNetwork:
-    """Red neuronal multicapa con soporte para dropout, L2 y Adam."""
+    """Red neuronal multicapa con soporte para dropout, L2, Adam y BatchNorm."""
 
     def __init__(
         self,
@@ -59,6 +59,7 @@ class NeuralNetwork:
         tasa_aprendizaje: float = 0.001,
         lambda_l2: float = 0.0,
         dropout_rate: float = 0.0,
+        use_batch_norm: bool = False,
         beta1: float = 0.9,
         beta2: float = 0.999,
         epsilon: float = 1e-8,
@@ -76,15 +77,26 @@ class NeuralNetwork:
         self.tasa_aprendizaje = tasa_aprendizaje
         self.lambda_l2 = lambda_l2
         self.dropout_rate = dropout_rate
+        self.use_batch_norm = use_batch_norm
         self.beta1 = beta1
         self.beta2 = beta2
         self.epsilon = epsilon
+        self.bn_momentum = 0.9
         self.rng = np.random.default_rng(semilla)
 
         self.pesos: List[np.ndarray] = []
         self.sesgos: List[np.ndarray] = []
+        self.gammas: List[np.ndarray] = []
+        self.betas: List[np.ndarray] = []
+        self.running_means: List[np.ndarray] = []
+        self.running_vars: List[np.ndarray] = []
+
         self.momentos_m: List[np.ndarray] = []
         self.momentos_v: List[np.ndarray] = []
+        self.momentos_m_gamma: List[np.ndarray] = []
+        self.momentos_v_gamma: List[np.ndarray] = []
+        self.momentos_m_beta: List[np.ndarray] = []
+        self.momentos_v_beta: List[np.ndarray] = []
         self.t = 0
 
         self._inicializar_parametros()
@@ -95,6 +107,16 @@ class NeuralNetwork:
         self.sesgos.clear()
         self.momentos_m.clear()
         self.momentos_v.clear()
+
+        if self.use_batch_norm:
+            self.gammas.clear()
+            self.betas.clear()
+            self.running_means.clear()
+            self.running_vars.clear()
+            self.momentos_m_gamma.clear()
+            self.momentos_v_gamma.clear()
+            self.momentos_m_beta.clear()
+            self.momentos_v_beta.clear()
 
         for i in range(self.num_capas - 1):
             fan_in = self.capas[i]
@@ -114,6 +136,21 @@ class NeuralNetwork:
             self.momentos_m.append(np.zeros_like(pesos))
             self.momentos_v.append(np.zeros_like(pesos))
 
+            if self.use_batch_norm and i < self.num_capas - 2:
+                gamma = np.ones((fan_out, 1), dtype=np.float32)
+                beta = np.zeros((fan_out, 1), dtype=np.float32)
+                running_mean = np.zeros((fan_out, 1), dtype=np.float32)
+                running_var = np.ones((fan_out, 1), dtype=np.float32)
+
+                self.gammas.append(gamma)
+                self.betas.append(beta)
+                self.running_means.append(running_mean)
+                self.running_vars.append(running_var)
+                self.momentos_m_gamma.append(np.zeros_like(gamma))
+                self.momentos_v_gamma.append(np.zeros_like(gamma))
+                self.momentos_m_beta.append(np.zeros_like(beta))
+                self.momentos_v_beta.append(np.zeros_like(beta))
+
     def _aplicar_dropout(self, activaciones: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Aplicar máscara de dropout y devolver logits y máscara."""
         if self.dropout_rate <= 0.0:
@@ -126,10 +163,11 @@ class NeuralNetwork:
         self,
         X: np.ndarray,
         training: bool = True,
-    ) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
+    ) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], List[Tuple]]:
         """Realizar el paso forward y devolver caches intermedios."""
         caches: Dict[str, np.ndarray] = {}
         dropout_masks: Dict[str, np.ndarray] = {}
+        bn_caches: List[Tuple] = []
         activacion_actual = X.T
         caches['A0'] = activacion_actual
 
@@ -138,6 +176,24 @@ class NeuralNetwork:
             sesgos = self.sesgos[i]
             logits = pesos @ activacion_actual + sesgos
             caches[f'Z{i+1}'] = logits
+
+            if self.use_batch_norm and i < self.num_capas - 2:
+                gamma = self.gammas[i]
+                beta = self.betas[i]
+                if training:
+                    mean = np.mean(logits, axis=1, keepdims=True)
+                    var = np.var(logits, axis=1, keepdims=True)
+                    self.running_means[i] = self.bn_momentum * self.running_means[i] + (1 - self.bn_momentum) * mean
+                    self.running_vars[i] = self.bn_momentum * self.running_vars[i] + (1 - self.bn_momentum) * var
+                else:
+                    mean = self.running_means[i]
+                    var = self.running_vars[i]
+                
+                logits_norm = (logits - mean) / np.sqrt(var + self.epsilon)
+                logits = gamma * logits_norm + beta
+                bn_caches.append((logits_norm, var))
+
+            caches[f'Z_bn{i+1}'] = logits
 
             nombre_activacion = self.activaciones[i]
             if nombre_activacion == 'softmax':
@@ -157,7 +213,7 @@ class NeuralNetwork:
 
             caches[f'A{i+1}'] = activacion_actual
 
-        return caches, dropout_masks
+        return caches, dropout_masks, bn_caches
 
     def _calcular_perdida(self, Y: np.ndarray, Y_pred: np.ndarray) -> float:
         """Calcular la funcion de perdida cross-entropy (con regularizacion L2)."""
@@ -178,30 +234,47 @@ class NeuralNetwork:
         self,
         caches: Dict[str, np.ndarray],
         dropout_masks: Dict[str, np.ndarray],
+        bn_caches: List[Tuple],
         X: np.ndarray,
         Y: np.ndarray,
-    ) -> Tuple[List[np.ndarray], List[np.ndarray]]:
-        """Calcular gradientes para pesos y sesgos."""
+    ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+        """Calcular gradientes para todos los parametros."""
         muestras = X.shape[0]
         activacion_final = caches[f'A{self.num_capas - 1}']
         grad_actual = (activacion_final.T - Y) / muestras
         grad_actual = grad_actual.T
 
-        grads_W = [np.zeros_like(peso) for peso in self.pesos]
-        grads_b = [np.zeros_like(sesgo) for sesgo in self.sesgos]
+        grads_W = [np.zeros_like(p) for p in self.pesos]
+        grads_b = [np.zeros_like(s) for s in self.sesgos]
+        grads_gamma = [np.zeros_like(g) for g in self.gammas] if self.use_batch_norm else []
+        grads_beta = [np.zeros_like(b) for b in self.betas] if self.use_batch_norm else []
 
         for i in reversed(range(self.num_capas - 1)):
             activacion_prev = caches[f'A{i}']
-            grads_W[i] = grad_actual @ activacion_prev.T
-            grads_b[i] = np.sum(grad_actual, axis=1, keepdims=True)
+            
+            if self.use_batch_norm and i < self.num_capas - 2:
+                logits_norm, var = bn_caches[i]
+                dZ_bn = grad_actual
+                grads_gamma[i] = np.sum(dZ_bn * logits_norm, axis=1, keepdims=True)
+                grads_beta[i] = np.sum(dZ_bn, axis=1, keepdims=True)
+
+                dZ_norm = dZ_bn * self.gammas[i]
+                dZ = (1. / (muestras * np.sqrt(var + self.epsilon))) * \
+                    (muestras * dZ_norm - np.sum(dZ_norm, axis=1, keepdims=True) -
+                    logits_norm * np.sum(dZ_norm * logits_norm, axis=1, keepdims=True))
+            else:
+                dZ = grad_actual
+
+            grads_W[i] = dZ @ activacion_prev.T
+            grads_b[i] = np.sum(dZ, axis=1, keepdims=True)
 
             if self.lambda_l2 > 0.0:
                 grads_W[i] += (self.lambda_l2 / muestras) * self.pesos[i]
 
             if i > 0:
                 pesos = self.pesos[i]
-                grad_prev = pesos.T @ grad_actual
-                logits_prev = caches[f'Z{i}']
+                grad_prev = pesos.T @ dZ
+                logits_prev = caches[f'Z_bn{i}'] if self.use_batch_norm and i-1 < self.num_capas - 2 else caches[f'Z{i}']
 
                 nombre_activacion = self.activaciones[i - 1]
                 if nombre_activacion == 'relu':
@@ -218,20 +291,39 @@ class NeuralNetwork:
 
                 grad_actual = grad_prev
 
-        return grads_W, grads_b
+        return grads_W, grads_b, grads_gamma, grads_beta
 
-    def _actualizar_parametros(self, grads_W: List[np.ndarray], grads_b: List[np.ndarray]) -> None:
-        """Actualizar pesos y sesgos usando Adam."""
+    def _actualizar_parametros(
+        self,
+        grads_W: List[np.ndarray],
+        grads_b: List[np.ndarray],
+        grads_gamma: List[np.ndarray],
+        grads_beta: List[np.ndarray],
+    ) -> None:
+        """Actualizar todos los parametros usando Adam."""
         self.t += 1
         for i in range(self.num_capas - 1):
+            # Actualizar pesos y sesgos
             self.momentos_m[i] = self.beta1 * self.momentos_m[i] + (1.0 - self.beta1) * grads_W[i]
             self.momentos_v[i] = self.beta2 * self.momentos_v[i] + (1.0 - self.beta2) * np.square(grads_W[i])
-
             m_hat = self.momentos_m[i] / (1.0 - self.beta1 ** self.t)
             v_hat = self.momentos_v[i] / (1.0 - self.beta2 ** self.t)
-
             self.pesos[i] -= self.tasa_aprendizaje * m_hat / (np.sqrt(v_hat) + self.epsilon)
             self.sesgos[i] -= self.tasa_aprendizaje * grads_b[i]
+
+            # Actualizar gamma y beta si se usa BatchNorm
+            if self.use_batch_norm and i < self.num_capas - 2:
+                self.momentos_m_gamma[i] = self.beta1 * self.momentos_m_gamma[i] + (1.0 - self.beta1) * grads_gamma[i]
+                self.momentos_v_gamma[i] = self.beta2 * self.momentos_v_gamma[i] + (1.0 - self.beta2) * np.square(grads_gamma[i])
+                m_hat_gamma = self.momentos_m_gamma[i] / (1.0 - self.beta1 ** self.t)
+                v_hat_gamma = self.momentos_v_gamma[i] / (1.0 - self.beta2 ** self.t)
+                self.gammas[i] -= self.tasa_aprendizaje * m_hat_gamma / (np.sqrt(v_hat_gamma) + self.epsilon)
+
+                self.momentos_m_beta[i] = self.beta1 * self.momentos_m_beta[i] + (1.0 - self.beta1) * grads_beta[i]
+                self.momentos_v_beta[i] = self.beta2 * self.momentos_v_beta[i] + (1.0 - self.beta2) * np.square(grads_beta[i])
+                m_hat_beta = self.momentos_m_beta[i] / (1.0 - self.beta1 ** self.t)
+                v_hat_beta = self.momentos_v_beta[i] / (1.0 - self.beta2 ** self.t)
+                self.betas[i] -= self.tasa_aprendizaje * m_hat_beta / (np.sqrt(v_hat_beta) + self.epsilon)
 
     def fit(
         self,
@@ -267,17 +359,17 @@ class NeuralNetwork:
                 if not X_lote.size:
                     continue
 
-                caches, masks = self._forward(X_lote, training=True)
-                grads_W, grads_b = self._backward(caches, masks, X_lote, Y_lote)
-                self._actualizar_parametros(grads_W, grads_b)
+                caches, masks, bn_caches = self._forward(X_lote, training=True)
+                grads_W, grads_b, grads_gamma, grads_beta = self._backward(caches, masks, bn_caches, X_lote, Y_lote)
+                self._actualizar_parametros(grads_W, grads_b, grads_gamma, grads_beta)
 
-            caches_train, _ = self._forward(X, training=False)
+            caches_train, _, _ = self._forward(X, training=False)
             Y_pred = caches_train[f'A{self.num_capas - 1}'].T
             perdida_train = self._calcular_perdida(Y, Y_pred)
             registro = {'epoch': epoca + 1, 'loss_train': perdida_train}
 
             if X_val is not None and Y_val is not None:
-                caches_val, _ = self._forward(X_val, training=False)
+                caches_val, _, _ = self._forward(X_val, training=False)
                 Y_val_pred = caches_val[f'A{self.num_capas - 1}'].T
                 registro['loss_val'] = self._calcular_perdida(Y_val, Y_val_pred)
                 registro['acc_val'] = self.calcular_precision(Y_val, Y_val_pred)
@@ -297,7 +389,7 @@ class NeuralNetwork:
         """Obtener probabilidades de salida para ``X``."""
         if X.ndim == 1:
             X = X.reshape(1, -1)
-        caches, _ = self._forward(X, training=False)
+        caches, _, _ = self._forward(X, training=False)
         return caches[f'A{self.num_capas - 1}'].T
 
     def predecir(self, X: np.ndarray) -> np.ndarray:
@@ -318,7 +410,7 @@ class NeuralNetwork:
         self._inicializar_parametros()
 
     def guardar_modelo(self, ruta_base: str) -> None:
-        """Guardar la arquitectura y pesos del modelo."""
+        """Guardar la arquitectura y parametros del modelo."""
         p = Path(ruta_base)
         p.mkdir(parents=True, exist_ok=True)
 
@@ -326,15 +418,23 @@ class NeuralNetwork:
             'capas': self.capas,
             'activaciones': self.activaciones,
             'dropout_rate': self.dropout_rate,
-            'lambda_l2': self.lambda_l2
+            'lambda_l2': self.lambda_l2,
+            'use_batch_norm': self.use_batch_norm,
         }
         with open(p / "arquitectura.json", "w") as f:
             json.dump(arquitectura, f)
-        
+
         for i, (pesos, sesgos) in enumerate(zip(self.pesos, self.sesgos)):
             np.save(p / f"pesos_{i}.npy", pesos)
             np.save(p / f"sesgos_{i}.npy", sesgos)
-    
+
+        if self.use_batch_norm:
+            for i in range(self.num_capas - 2):
+                np.save(p / f"gamma_{i}.npy", self.gammas[i])
+                np.save(p / f"beta_{i}.npy", self.betas[i])
+                np.save(p / f"running_mean_{i}.npy", self.running_means[i])
+                np.save(p / f"running_var_{i}.npy", self.running_vars[i])
+
     @classmethod
     def cargar_modelo(cls, ruta_base: str) -> NeuralNetwork:
         """Cargar un modelo desde su arquitectura y pesos."""
@@ -348,4 +448,11 @@ class NeuralNetwork:
             modelo.pesos[i] = np.load(p / f"pesos_{i}.npy")
             modelo.sesgos[i] = np.load(p / f"sesgos_{i}.npy")
             
+        if modelo.use_batch_norm:
+            for i in range(modelo.num_capas - 2):
+                modelo.gammas[i] = np.load(p / f"gamma_{i}.npy")
+                modelo.betas[i] = np.load(p / f"beta_{i}.npy")
+                modelo.running_means[i] = np.load(p / f"running_mean_{i}.npy")
+                modelo.running_vars[i] = np.load(p / f"running_var_{i}.npy")
+
         return modelo

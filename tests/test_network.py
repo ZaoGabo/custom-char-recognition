@@ -78,7 +78,7 @@ def test_inicializacion_red(red_neuronal):
 def test_forward_pass(red_neuronal):
     """Verificar que el forward pass produzca una salida con la dimension correcta."""
     X = np.random.rand(3, 10)  # 3 muestras, 10 caracteristicas
-    caches, _ = red_neuronal._forward(X, training=False)
+    caches, _, _ = red_neuronal._forward(X, training=False)
     salida = caches[f'A{red_neuronal.num_capas - 1}']
     assert salida.T.shape == (3, 2)  # 3 muestras, 2 clases
 
@@ -112,3 +112,30 @@ def test_prediccion(red_neuronal):
     preds = red_neuronal.predecir(X)
     assert probs.shape == (4, 2)
     assert preds.shape == (4,)
+
+
+def test_batch_normalization():
+    """Verificar la funcionalidad de Batch Normalization."""
+    # Red con una capa oculta y BatchNorm
+    red = NeuralNetwork(capas=[10, 5, 2], use_batch_norm=True, semilla=42)
+    assert red.use_batch_norm
+    assert len(red.gammas) == 1
+    assert red.gammas[0].shape == (5, 1)
+
+    X = np.random.randn(20, 10) * 2 + 3  # Datos con media != 0 y std_dev != 1
+    Y = np.zeros((20, 2))
+    Y[np.arange(20), np.random.randint(0, 2, 20)] = 1
+
+    # Verificar forward pass en modo entrenamiento
+    caches, _, _ = red._forward(X, training=True)
+    # La salida de la capa oculta antes de la activacion deberia estar normalizada
+    Z1_bn = caches['Z_bn1']
+    assert np.allclose(np.mean(Z1_bn, axis=1), 0, atol=1e-6)
+    assert np.allclose(np.var(Z1_bn, axis=1), 1, atol=1e-1)
+
+    # Verificar que los parametros gamma y beta se actualizan
+    gamma_inicial = red.gammas[0].copy()
+    beta_inicial = red.betas[0].copy()
+    red.fit(X, Y, epocas=1, tamano_lote=5)
+    assert not np.array_equal(gamma_inicial, red.gammas[0])
+    assert not np.array_equal(beta_inicial, red.betas[0])
