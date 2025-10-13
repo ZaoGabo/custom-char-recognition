@@ -64,9 +64,12 @@ def apply_augmentation(image: np.ndarray) -> np.ndarray:
             top = (new_height - height) // 2
             pil_img = pil_img.crop((left, top, left + width, top + height))
         else:
-            border_x = (width - new_width) // 2
-            border_y = (height - new_height) // 2
-            pil_img = ImageOps.expand(pil_img, border=(border_x, border_y), fill=0)
+            border_x_left = (width - new_width) // 2
+            border_x_right = width - new_width - border_x_left
+            border_y_top = (height - new_height) // 2
+            border_y_bottom = height - new_height - border_y_top
+            padding = (border_x_left, border_y_top, border_x_right, border_y_bottom)
+            pil_img = ImageOps.expand(pil_img, border=padding, fill=0)
 
     if AUG['horizontal_flip'] and np.random.random() > 0.5:
         pil_img = pil_img.transpose(Image.FLIP_LEFT_RIGHT)

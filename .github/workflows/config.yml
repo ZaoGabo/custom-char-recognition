@@ -1,0 +1,98 @@
+network_config:
+  capas: [784, 512, 256, 128, 52]
+  activaciones: ['relu', 'relu', 'relu', 'softmax']
+  tasa_aprendizaje: 0.001
+  lambda_l2: 0.0005
+  dropout_rate: 0.2
+  epocas: 120
+  tamano_lote: 64
+  beta1: 0.9
+  beta2: 0.999
+  epsilon: 1e-8
+  entrada_neuronas: 784
+  oculta_neuronas: 128
+  salida_neuronas: 52
+  funcion_activacion: 'sigmoide'
+
+data_config:
+  tamano_imagen: [28, 28]
+  normalizar: true
+  usar_augmentacion: true
+  division_entrenamiento: 0.8
+  division_validacion: 0.1
+  division_prueba: 0.1
+  semilla: 42
+
+augmentation_config:
+  rango_rotacion: 15
+  desplazamiento_horizontal: 0.1
+  desplazamiento_vertical: 0.1
+  rango_zoom: 0.1
+  voltear_horizontal: false
+  voltear_vertical: false
+
+paths:
+  datos_crudos: 'data/raw/'
+  datos_procesados: 'data/processed/'
+  modelos: 'models/'
+  salidas: 'output/'
+  registros: 'output/logs/'
+
+logging_config:
+  nivel: 'INFO'
+  formato: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  archivo: 'output/logs/entrenamiento.log'
+
+custom_labels:
+  - 'A'
+  - 'B'
+  - 'C'
+  - 'D'
+  - 'E'
+  - 'F'
+  - 'G'
+  - 'H'
+  - 'I'
+  - 'J'
+  - 'K'
+  - 'L'
+  - 'M'
+  - 'N'
+  - 'O'
+  - 'P'
+  - 'Q'
+  - 'R'
+  - 'S'
+  - 'T'
+  - 'U'
+  - 'V'
+  - 'W'
+  - 'X'
+  - 'Y'
+  - 'Z'
+  - 'a'
+  - 'b'
+  - 'c'
+  - 'd'
+  - 'e'
+  - 'f'
+  - 'g'
+  - 'h'
+  - 'i'
+  - 'j'
+  - 'k'
+  - 'l'
+  - 'm'
+  - 'n'
+  - 'o'
+  - 'p'
+  - 'q'
+  - 'r'
+  - 's'
+  - 't'
+  - 'u'
+  - 'v'
+  - 'w'
+  - 'x'
+  - 'y'
+  - 'z'

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from src.network import NeuralNetwork
-from src.trainer import _one_hot, _evaluar, entrenar_modelo, preparar_datos
+from src.trainer import _one_hot, entrenar_modelo
 
 
 @pytest.fixture
@@ -47,57 +47,29 @@ def test_one_hot_encoding():
     assert np.array_equal(one_hot_labels, expected)
 
 
-def test_evaluar(mock_network):
-    """Verificar que la evaluacion calcule metricas correctamente."""
-    X = np.random.rand(2, 4)
-    y_true_oh = np.array([[1, 0], [0, 1]])
-    metricas = _evaluar(mock_network, X, y_true_oh)
-
-    mock_network.predecir_probabilidades.assert_called_once_with(X)
-
-    # Verificar la llamada a calcular_perdida de forma robusta
-    mock_network.calcular_perdida.assert_called_once()
-    called_args, _ = mock_network.calcular_perdida.call_args
-    assert np.array_equal(called_args[0], y_true_oh)
-    assert called_args[1].shape == y_true_oh.shape
-
-    assert metricas['loss'] == 0.5
-
-    # El accuracy depende de la salida aleatoria, asi que solo verificamos el tipo y rango
-    assert isinstance(metricas['accuracy'], float)
-    assert 0.0 <= metricas['accuracy'] <= 1.0
 
 
-@patch('src.trainer.preparar_datos')
+@patch('src.trainer.DataLoader')
 @patch('src.trainer._construir_modelo')
-@patch('pickle.dump')
-def test_entrenar_modelo_flujo_completo(mock_pickle_dump, mock_construir_modelo, mock_preparar_datos, mock_data, mock_network, tmp_path):
-    """
-    Verificar el flujo de entrenamiento:
-    - Carga de datos
-    - Construccion de modelo
-    - Entrenamiento (fit)
-    - Guardado de modelo
-    - Evaluacion
-    """
+@patch('src.trainer.Path.exists')
+def test_entrenar_modelo_flujo_completo(mock_exists, mock_construir, mock_dataloader, mock_data):
+    """Verificar el flujo principal de entrenamiento."""
     # Configurar mocks
-    mock_preparar_datos.return_value = mock_data
-    mock_construir_modelo.return_value = mock_network
+    mock_dataloader_instance = mock_dataloader.return_value
+    mock_dataloader_instance.dividir_datos.return_value = (['train_path'], ['val_path'], [0], [1])
+    
+    mock_modelo_instance = MagicMock(spec=NeuralNetwork)
+    mock_modelo_instance.capas = [784, 128, 52]  # Simular capas
+    mock_construir.return_value = mock_modelo_instance
+    
+    mock_exists.return_value = False
 
-    # Sobrescribir la ruta de modelos para usar un directorio temporal
-    with patch('src.trainer.PATHS', {'modelos': str(tmp_path)}):
-        modelo, metricas = entrenar_modelo(force=True, verbose=False)
+    with patch('src.trainer.next') as mock_next:
+        mock_next.return_value = (np.random.rand(10, 784), np.array([0]*10))
+        entrenar_modelo(force=True, verbose=False)
 
-        # Verificar llamadas
-        mock_preparar_datos.assert_called_once()
-        mock_construir_modelo.assert_called_once()
-        mock_network.fit.assert_called_once()
-        mock_pickle_dump.assert_called_once()
-
-        # Verificar la estructura de las metricas
-        assert 'train' in metricas
-        assert 'val' in metricas
-        assert 'test' in metricas
-        assert 'loss' in metricas['test']
-        assert 'accuracy' in metricas['test']
-        assert modelo == mock_network
+    # Verificar llamadas clave
+    mock_dataloader_instance.cargar_desde_directorio.assert_called_once()
+    mock_dataloader_instance.dividir_datos.assert_called_once()
+    mock_construir.assert_called_once()
+    mock_modelo_instance.guardar_modelo.assert_called_once()

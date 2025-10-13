@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -314,3 +316,36 @@ class NeuralNetwork:
         """Reinicializar pesos y contadores del optimizador."""
         self.t = 0
         self._inicializar_parametros()
+
+    def guardar_modelo(self, ruta_base: str) -> None:
+        """Guardar la arquitectura y pesos del modelo."""
+        p = Path(ruta_base)
+        p.mkdir(parents=True, exist_ok=True)
+
+        arquitectura = {
+            'capas': self.capas,
+            'activaciones': self.activaciones,
+            'dropout_rate': self.dropout_rate,
+            'lambda_l2': self.lambda_l2
+        }
+        with open(p / "arquitectura.json", "w") as f:
+            json.dump(arquitectura, f)
+        
+        for i, (pesos, sesgos) in enumerate(zip(self.pesos, self.sesgos)):
+            np.save(p / f"pesos_{i}.npy", pesos)
+            np.save(p / f"sesgos_{i}.npy", sesgos)
+    
+    @classmethod
+    def cargar_modelo(cls, ruta_base: str) -> NeuralNetwork:
+        """Cargar un modelo desde su arquitectura y pesos."""
+        p = Path(ruta_base)
+        with open(p / "arquitectura.json", "r") as f:
+            arquitectura = json.load(f)
+        
+        modelo = cls(**arquitectura)
+        
+        for i in range(modelo.num_capas - 1):
+            modelo.pesos[i] = np.load(p / f"pesos_{i}.npy")
+            modelo.sesgos[i] = np.load(p / f"sesgos_{i}.npy")
+            
+        return modelo

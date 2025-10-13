@@ -27,7 +27,7 @@ def test_normalizar_entrada():
     entrada_float = np.array([0.0, 0.5, 1.0])
     resultado_float = normalizar_entrada(entrada_float)
     assert np.allclose(resultado_float, [0.0, 0.5, 1.0])
-
+    
     # Caso 3: Entrada vacia
     entrada_vacia = np.array([])
     resultado_vacio = normalizar_entrada(entrada_vacia)
@@ -42,8 +42,8 @@ def test_evaluar_red(mock_red_predictor):
             "A,0,255",  # Acierto (predice A)
             "A,255,0",  # Fallo (predice B)
         ]
-
+        
         rendimiento = evaluar_red(mock_red_predictor, datos_prueba)
-
+        
         assert rendimiento == 0.5
         assert mock_red_predictor.predecir_probabilidades.call_count == 2

@@ -1,0 +1,94 @@
+# Configuración del Proyecto de Reconocimiento de Caracteres
+
+# Configuración de la red neuronal
+network_config:
+  capas: [256, 128, 64]  # Más capas y neuronas
+  activaciones: ['relu', 'relu', 'relu', 'softmax']  # Funciones de activación
+  oculta_neuronas: 256  # Neuronas en capa oculta (fallback)
+  tasa_aprendizaje: 0.0005  # Tasa de aprendizaje más baja para mejor convergencia
+  lambda_l2: 0.00001  # Regularización L2 reducida
+  dropout_rate: 0.2  # Menos dropout para aprender mejor
+  tamano_lote: 32  # Lotes más pequeños para mejor generalización
+  epocas: 200  # Más épocas para mejor entrenamiento
+
+# Configuración de datos
+data_config:
+  tamano_imagen: [28, 28]  # Alto x Ancho
+  usar_augmentacion: true
+  semilla: 42
+
+# Configuración de aumento de datos
+augmentation_config:
+  rango_rotacion: 15
+  desplazamiento_horizontal: 0.1
+  desplazamiento_vertical: 0.1
+  rango_zoom: 0.1
+  voltear_horizontal: false
+  voltear_vertical: false
+
+# Rutas del proyecto
+paths:
+  datos_crudos: 'data/raw'
+  datos_procesados: 'data/processed'
+  modelos: 'models'
+  logs: 'logs'
+
+# Configuración de logging
+logging_config:
+  nivel: 'INFO'
+  formato: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+# Etiquetas personalizadas (A-Z mayúsculas y a-z minúsculas)
+custom_labels:
+  - 'A'
+  - 'B'
+  - 'C'
+  - 'D'
+  - 'E'
+  - 'F'
+  - 'G'
+  - 'H'
+  - 'I'
+  - 'J'
+  - 'K'
+  - 'L'
+  - 'M'
+  - 'N'
+  - 'O'
+  - 'P'
+  - 'Q'
+  - 'R'
+  - 'S'
+  - 'T'
+  - 'U'
+  - 'V'
+  - 'W'
+  - 'X'
+  - 'Y'
+  - 'Z'
+  - 'a'
+  - 'b'
+  - 'c'
+  - 'd'
+  - 'e'
+  - 'f'
+  - 'g'
+  - 'h'
+  - 'i'
+  - 'j'
+  - 'k'
+  - 'l'
+  - 'm'
+  - 'n'
+  - 'o'
+  - 'p'
+  - 'q'
+  - 'r'
+  - 's'
+  - 't'
+  - 'u'
+  - 'v'
+  - 'w'
+  - 'x'
+  - 'y'
+  - 'z'

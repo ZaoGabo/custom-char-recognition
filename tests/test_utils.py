@@ -47,12 +47,12 @@ def test_plot_images(mock_plt):
     """Verificar que la funcion de ploteo llame a matplotlib."""
     mock_fig, mock_axes = MagicMock(), MagicMock()
     mock_plt.subplots.return_value = (mock_fig, mock_axes)
-
+    
     imagenes = np.random.rand(16, 28, 28)
     etiquetas = np.arange(16)
     mapa = LabelMap([chr(ord('A') + i) for i in range(16)])
     plot_images(imagenes, etiquetas, mapa)
-
+    
     assert mock_plt.subplots.called
     assert mock_plt.tight_layout.called
     assert mock_plt.show.called
@@ -62,15 +62,15 @@ def test_save_predictions_plot(mock_plt):
     """Verificar que la funcion de guardado de plots llame a matplotlib."""
     mock_fig, mock_axes = MagicMock(), MagicMock()
     mock_plt.subplots.return_value = (mock_fig, mock_axes)
-
+    
     imagenes = np.random.rand(16, 28, 28)
     true_labels = np.arange(16)
     pred_labels = np.arange(16)
     mapa = LabelMap([chr(ord('A') + i) for i in range(16)])
     filepath = "test.png"
-
+    
     save_predictions_plot(imagenes, true_labels, pred_labels, mapa, filepath)
-
+    
     assert mock_plt.subplots.called
     assert mock_plt.savefig.called
     assert mock_plt.close.called
@@ -83,9 +83,9 @@ def test_print_classification_report(mock_confusion_matrix, mock_classification_
     y_true = np.array([0, 1, 0])
     y_pred = np.array([0, 1, 1])
     mapa = LabelMap(['A', 'B'])
-
+    
     print_classification_report(y_true, y_pred, mapa)
-
+    
     assert mock_classification_report.called
     assert mock_confusion_matrix.called
     assert mock_print.call_count > 0

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pickle
 import sys
 from pathlib import Path
 
@@ -14,30 +13,26 @@ RUTA_RAIZ = Path(__file__).resolve().parent.parent
 if str(RUTA_RAIZ) not in sys.path:
     sys.path.insert(0, str(RUTA_RAIZ))
 
-sys.path.insert(0, str(RUTA_RAIZ / 'src'))
-
 from src.config import PATHS
 from src.label_map import DEFAULT_LABEL_MAP
+from src.network import NeuralNetwork
 
 
 @st.cache_resource
-def cargar_modelo():
-    """Cargar el modelo entrenado desde ``models/``."""
-    modelo_path = RUTA_RAIZ / PATHS['modelos'] / 'modelo_entrenado.pkl'
-    if not modelo_path.exists():
-        st.error('No se encontro el modelo entrenado.')
+def cargar_modelo_entrenado():
+    """Cargar el modelo entrenado usando el nuevo formato (JSON + npy)."""
+    modelo_dir = RUTA_RAIZ / PATHS['modelos'] / 'modelo_entrenado'
+    arquitectura_path = modelo_dir / "arquitectura.json"
+
+    if not arquitectura_path.exists():
+        st.error('No se encontro el archivo de arquitectura del modelo.')
         st.info('Ejecute primero: `python -m src.trainer --force`')
         return None
 
     try:
-        with modelo_path.open('rb') as archivo:
-            modelo = pickle.load(archivo)
-    except (OSError, pickle.UnpicklingError) as exc:  # pragma: no cover
+        modelo = NeuralNetwork.cargar_modelo(str(modelo_dir))
+    except (OSError, FileNotFoundError, json.JSONDecodeError) as exc:
         st.error(f'Error cargando el modelo: {exc}')
-        with st.expander('Informacion de debug'):
-            st.write(f"**Ruta del modelo:** {modelo_path}")
-            st.write(f"**Archivo existe:** {modelo_path.exists()}")
-            st.write(f"**Error completo:** {repr(exc)}")
         return None
 
     st.success('Modelo cargado exitosamente')
@@ -52,10 +47,7 @@ def preprocesar_imagen(imagen_pil: Image.Image) -> np.ndarray:
 
 def _obtener_probabilidades(modelo, entrada: np.ndarray) -> np.ndarray:
     """Obtener una matriz (1, clases) con probabilidades del modelo."""
-    if hasattr(modelo, 'predecir_probabilidades'):
-        salida = modelo.predecir_probabilidades(entrada)
-    else:
-        salida = modelo.predecir(entrada)
+    salida = modelo.predecir_probabilidades(entrada)
     return salida if salida.ndim == 2 else salida.reshape(1, -1)
 
 
@@ -79,20 +71,16 @@ def main() -> None:
     """Punto de entrada de la interfaz Streamlit."""
     st.set_page_config(page_title='Reconocimiento de Caracteres', page_icon='✏', layout='centered')
     st.title('Reconocimiento de Caracteres Personalizados')
-    st.markdown('---')
-    st.write('Sube una imagen de un caracter para probar el modelo de red neuronal.')
-
-    modelo = cargar_modelo()
+    
+    modelo = cargar_modelo_entrenado()
     if modelo is None:
         st.stop()
 
-    entrada_dim = getattr(modelo, 'capas', [getattr(modelo, 'entrada_neuronas', 784)])[0]
     with st.expander('Informacion del Modelo'):
-        st.write(f"**Neuronas de entrada:** {entrada_dim}")
-        st.write(f"**Neuronas de salida:** {DEFAULT_LABEL_MAP.get_num_classes()}")
-        st.write(f"**Etiquetas:** {', '.join(DEFAULT_LABEL_MAP.labels[:10])}...")
+        st.write(f"**Capas:** {modelo.capas}")
+        st.write(f"**Funciones de Activacion:** {modelo.activaciones}")
 
-    st.markdown('### Subir Imagen')
+    st.markdown('### Subir Imagen para Prediccion')
     imagen_subida = st.file_uploader(
         'Selecciona una imagen de un caracter:',
         type=['png', 'jpg', 'jpeg', 'bmp'],
@@ -109,33 +97,20 @@ def main() -> None:
 
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown('**Imagen Original**')
-        st.image(imagen_pil, caption='Imagen subida', use_column_width=True)
+        st.image(imagen_pil, caption='Imagen Original', use_column_width=True)
 
     entrada = preprocesar_imagen(imagen_pil)
     with col2:
-        st.markdown('**Imagen Procesada (28x28)**')
-        st.image(entrada.reshape(28, 28), caption='Imagen procesada', use_column_width=True, clamp=True)
+        st.image(entrada.reshape(28, 28), caption='Imagen Procesada (28x28)', use_column_width=True, clamp=True)
 
-    if st.button('Predecir Caracter', type='primary'):
-        try:
-            probabilidades = _obtener_probabilidades(modelo, entrada)
-        except (ValueError, TypeError) as exc:  # pragma: no cover
-            st.error(f'Error durante la prediccion: {exc}')
-            return
-
+    if st.button('Predecir', type='primary'):
+        probabilidades = _obtener_probabilidades(modelo, entrada)
         indice_predicho = int(np.argmax(probabilidades))
         confianza = float(probabilidades[0, indice_predicho])
         etiqueta_predicha = DEFAULT_LABEL_MAP.get_label(indice_predicho)
 
-        st.markdown('### Resultado de la Prediccion')
-        info_col, conf_col = st.columns(2)
-        with info_col:
-            st.metric(label='Caracter Predicho', value=f"'{etiqueta_predicha}'")
-        with conf_col:
-            st.metric(label='Confianza', value=f'{confianza:.3f}', delta=f'{confianza * 100:.1f}%')
-        st.progress(confianza)
-
+        st.metric(label='Caracter Predicho', value=f"'{etiqueta_predicha}'", delta=f'{confianza:.2%}')
+        
         st.markdown('#### Top 5 Predicciones')
         _mostrar_top_predicciones(probabilidades)
 
