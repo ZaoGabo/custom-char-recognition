@@ -83,9 +83,24 @@ models/*.joblib
 models/*.model
 models/*.weights
 
+# Archivos de pesos y parámetros de redes neuronales (NumPy)
+models/**/*.npy
+models/**/pesos_*.npy
+models/**/sesgos_*.npy
+models/**/gamma_*.npy
+models/**/beta_*.npy
+models/**/running_mean_*.npy
+models/**/running_var_*.npy
+models/**/arquitectura.json
+
+# Modelos temporales y checkpoints
+models/best_model_temp/
+models/modelo_entrenado/
+
 # Mantener estructura de carpetas
 !models/
 !models/.gitkeep
+!models/README.md
 
 # Checkpoints y logs de entrenamiento
 checkpoints/

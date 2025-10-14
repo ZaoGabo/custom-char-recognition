@@ -72,4 +72,4 @@ def test_entrenar_modelo_flujo_completo(mock_exists, mock_construir, mock_datalo
     mock_dataloader_instance.cargar_desde_directorio.assert_called_once()
     mock_dataloader_instance.dividir_datos.assert_called_once()
     mock_construir.assert_called_once()
-    mock_modelo_instance.guardar_modelo.assert_called_once()
+    assert mock_modelo_instance.guardar_modelo.call_count >= 1

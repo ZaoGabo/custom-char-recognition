@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 from pathlib import Path
 from typing import Dict, List
 
@@ -45,6 +46,7 @@ def _construir_modelo(input_dim: int, num_clases: int) -> NeuralNetwork:
         tasa_aprendizaje=NETWORK_CONFIG.get('tasa_aprendizaje', 0.001),
         lambda_l2=NETWORK_CONFIG.get('lambda_l2', 0.0),
         dropout_rate=NETWORK_CONFIG.get('dropout_rate', 0.0),
+        use_batch_norm=NETWORK_CONFIG.get('use_batch_norm', False),
         semilla=DATA_CONFIG.get('semilla'),
     )
 
@@ -80,12 +82,12 @@ def evaluar_modelo(modelo: NeuralNetwork, loader: DataLoader, rutas_val: List[st
 def entrenar_modelo(force: bool = False, verbose: bool = False) -> None:
     """Flujo completo de entrenamiento y evaluacion."""
     _asegurar_datos()
-    
+
     loader = DataLoader(ruta_datos=PATHS['datos_crudos'])
     loader.cargar_desde_directorio()
-    
+
     rutas_train, rutas_val, y_train_idx, y_val_idx = loader.dividir_datos()
-    
+
     num_clases = DEFAULT_LABEL_MAP.get_num_classes()
     img_height, img_width = DATA_CONFIG['tamano_imagen']
     input_dim = img_height * img_width
@@ -96,36 +98,80 @@ def entrenar_modelo(force: bool = False, verbose: bool = False) -> None:
         return
 
     modelo = _construir_modelo(input_dim, num_clases)
-    
+
     train_gen = loader.generar_lotes(
-        rutas_train, y_train_idx, 
-        NETWORK_CONFIG['tamano_lote'], 
-        (img_height, img_width), 
+        rutas_train, y_train_idx,
+        NETWORK_CONFIG['tamano_lote'],
+        (img_height, img_width),
         augment=True
     )
-    
+
     epocas = NETWORK_CONFIG.get('epocas', 100)
     pasos_por_epoca = len(rutas_train) // NETWORK_CONFIG['tamano_lote']
+
+    # --- Early Stopping ---
+    patience = NETWORK_CONFIG.get('early_stopping_patience', 10)
+    min_delta = NETWORK_CONFIG.get('early_stopping_min_delta', 0.0)
+    best_val_loss = float('inf')
+    patience_counter = 0
+    best_model_path = Path(PATHS['modelos']) / 'best_model_temp'
+    if best_model_path.exists():
+        shutil.rmtree(best_model_path)
+    best_model_path.mkdir(parents=True, exist_ok=True)
+    # --- Fin Early Stopping ---
 
     for epoca in range(epocas):
         perdida_epoca = 0
         for _ in range(pasos_por_epoca):
             X_lote, y_lote = next(train_gen)
             y_lote_oh = _one_hot(y_lote, num_clases)
-            
-            caches, masks = modelo._forward(X_lote, training=True)
-            grads_W, grads_b = modelo._backward(caches, masks, X_lote, y_lote_oh)
-            modelo._actualizar_parametros(grads_W, grads_b)
-            
+
+            caches, masks, bn_caches = modelo._forward(X_lote, training=True)
+            grads_W, grads_b, grads_gamma, grads_beta = modelo._backward(
+                caches, masks, bn_caches, X_lote, y_lote_oh
+            )
+            modelo._actualizar_parametros(grads_W, grads_b, grads_gamma, grads_beta)
+
             perdida_epoca += modelo.calcular_perdida(y_lote_oh, caches[f'A{modelo.num_capas - 1}'].T)
-        
+
+        # --- Logica de Early Stopping ---
+        metricas_val = evaluar_modelo(modelo, loader, rutas_val, y_val_idx)
+        val_loss = metricas_val['loss']
+
         if verbose:
-            print(f"Epoca {epoca+1}/{epocas} - Perdida de entrenamiento: {perdida_epoca / pasos_por_epoca:.4f}")
+            print(
+                f"Epoca {epoca+1}/{epocas} - "
+                f"Perdida de entrenamiento: {perdida_epoca / pasos_por_epoca:.4f} - "
+                f"Perdida de validación: {val_loss:.4f} - "
+                f"Precisión de validación: {metricas_val['accuracy']:.4f}"
+            )
+
+        if val_loss < best_val_loss - min_delta:
+            best_val_loss = val_loss
+            patience_counter = 0
+            modelo.guardar_modelo(str(best_model_path))
+            if verbose:
+                print(f'  Mejora encontrada. Guardando mejor modelo en {best_model_path}.')
+        else:
+            patience_counter += 1
+            if verbose:
+                print(f'  No hubo mejora. Paciencia: {patience_counter}/{patience}.')
+
+        if patience_counter >= patience:
+            print(f'\nDeteniendo entrenamiento (Early Stopping) en la epoca {epoca + 1}.')
+            break
+    
+    # Cargar el mejor modelo si se guardo al menos una vez
+    if any(best_model_path.iterdir()):
+        print(f'\nCargando el mejor modelo con loss de validación: {best_val_loss:.4f}')
+        modelo = NeuralNetwork.cargar_modelo(str(best_model_path))
+    
+    shutil.rmtree(best_model_path)
 
     modelo.guardar_modelo(str(modelo_dir))
-    print(f'Modelo guardado en {modelo_dir}')
-    
-    print("\nEvaluando modelo en conjunto de validación...")
+    print(f'Mejor modelo guardado en {modelo_dir}')
+
+    print("\nEvaluando el mejor modelo en conjunto de validación...")
     metricas = evaluar_modelo(modelo, loader, rutas_val, y_val_idx)
     print(f"Perdida de validación: {metricas['loss']:.4f}")
     print(f"Precisión de validación: {metricas['accuracy']:.4f}")

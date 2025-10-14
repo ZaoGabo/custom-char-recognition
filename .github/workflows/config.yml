@@ -4,8 +4,11 @@ network_config:
   tasa_aprendizaje: 0.001
   lambda_l2: 0.0005
   dropout_rate: 0.2
+  use_batch_norm: true
   epocas: 120
   tamano_lote: 64
+  early_stopping_patience: 10
+  early_stopping_min_delta: 0.001
   beta1: 0.9
   beta2: 0.999
   epsilon: 1e-8
