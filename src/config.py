@@ -16,6 +16,9 @@ def _cargar_config():
 _config = _cargar_config()
 
 NETWORK_CONFIG = _config.get('network_config', {})
+if 'lr_scheduler_config' in _config:
+    NETWORK_CONFIG['lr_scheduler_config'] = _config['lr_scheduler_config']
+    
 DATA_CONFIG = _config.get('data_config', {})
 AUGMENTATION_CONFIG = _config.get('augmentation_config', {})
 PATHS = _config.get('paths', {})

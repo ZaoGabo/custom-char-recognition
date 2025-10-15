@@ -409,6 +409,9 @@ class NeuralNetwork:
         self.t = 0
         self._inicializar_parametros()
 
+    def set_tasa_aprendizaje(self, nueva_tasa: float) -> None:
+        self.tasa_aprendizaje = nueva_tasa
+        
     def guardar_modelo(self, ruta_base: str) -> None:
         """Guardar la arquitectura y parametros del modelo."""
         p = Path(ruta_base)

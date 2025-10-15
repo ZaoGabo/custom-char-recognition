@@ -50,6 +50,22 @@ def _construir_modelo(input_dim: int, num_clases: int) -> NeuralNetwork:
         semilla=DATA_CONFIG.get('semilla'),
     )
 
+def _actualizar_tasa_aprendizaje(epoca: int) -> float:
+    lr_inicial = NETWORK_CONFIG.get('tasa_aprendizaje', 0.001)
+    scheduler_config = NETWORK_CONFIG.get('lr_scheduler_config')
+
+    if not scheduler_config or scheduler_config.get('tipo') != 'step_decay':
+        return lr_inicial
+
+    tasa_decaimento = scheduler_config.get('tasa_decaimento', 0.1)
+    epocas_decaimento = scheduler_config.get('epocas_decaimento', 50)
+    
+    if epocas_decaimento <= 0:
+        return lr_inicial
+        
+    nueva_lr = lr_inicial * (tasa_decaimento ** (epoca // epocas_decaimento))
+    return nueva_lr
+
 def evaluar_modelo(modelo: NeuralNetwork, loader: DataLoader, rutas_val: List[str], y_val_idx: List[int]) -> Dict[str, float]:
     """Evaluar el modelo en el conjunto de validación."""
     num_clases = modelo.capas[-1]
@@ -121,6 +137,8 @@ def entrenar_modelo(force: bool = False, verbose: bool = False) -> None:
     # --- Fin Early Stopping ---
 
     for epoca in range(epocas):
+        nueva_lr = _actualizar_tasa_aprendizaje(epoca)
+        modelo.set_tasa_aprendizaje(nueva_lr)
         perdida_epoca = 0
         for _ in range(pasos_por_epoca):
             X_lote, y_lote = next(train_gen)

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from src.network import NeuralNetwork
-from src.trainer import _one_hot, entrenar_modelo
+from src.trainer import _one_hot, entrenar_modelo, _actualizar_tasa_aprendizaje
 
 
 @pytest.fixture
@@ -47,13 +47,39 @@ def test_one_hot_encoding():
     assert np.array_equal(one_hot_labels, expected)
 
 
+pytest.mark.parametrize(
+    "epoca, lr_esperada",
+    [
+        (0, 0.001),
+        (49, 0.001),
+        (50, 0.0001),
+        (99, 0.0001),
+        (100, 0.00001),
+    ],
+)
+@patch('src.trainer.NETWORK_CONFIG')
+def test_actualizar_tasa_aprendizaje_step_decay(mock_network_config, epoca, lr_esperada):
+    """Verificar que la tasa de aprendizaje se actualice correctamente."""
+    mock_network_config.get.side_effect = lambda key, default=None: {
+        'tasa_aprendizaje': 0.001,
+        'lr_scheduler_config': {
+            'tipo': 'step_decay',
+            'tasa_decaimento': 0.1,
+            'epocas_decaimento': 50,
+        },
+    }.get(key, default)
+
+    lr_calculada = _actualizar_tasa_aprendizaje(epoca)
+    assert lr_calculada == pytest.approx(lr_esperada)
 
 
 @patch('src.trainer.DataLoader')
 @patch('src.trainer._construir_modelo')
 @patch('src.trainer.Path.exists')
-def test_entrenar_modelo_flujo_completo(mock_exists, mock_construir, mock_dataloader, mock_data):
-    """Verificar el flujo principal de entrenamiento."""
+@patch('src.trainer._actualizar_tasa_aprendizaje')
+def test_entrenar_modelo_flujo_completo(
+    mock_actualizar_lr, mock_exists, mock_construir, mock_dataloader, mock_data
+):
     # Configurar mocks
     mock_dataloader_instance = mock_dataloader.return_value
     mock_dataloader_instance.dividir_datos.return_value = (['train_path'], ['val_path'], [0], [1])

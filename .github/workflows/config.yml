@@ -1,5 +1,5 @@
 network_config:
-  capas: [784, 512, 256, 128, 52]
+  capas: [256, 128, 64]
   activaciones: ['relu', 'relu', 'relu', 'softmax']
   tasa_aprendizaje: 0.001
   lambda_l2: 0.0005
@@ -16,6 +16,14 @@ network_config:
   oculta_neuronas: 128
   salida_neuronas: 52
   funcion_activacion: 'sigmoide'
+
+
+lr_scheduler_config:
+    tipo: 'step_decay'
+    tasa_decaimiento: 0.1
+    epocas_decaimiento: 30
+
+
 
 data_config:
   tamano_imagen: [28, 28]
