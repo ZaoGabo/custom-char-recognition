@@ -47,7 +47,7 @@ def test_one_hot_encoding():
     assert np.array_equal(one_hot_labels, expected)
 
 
-pytest.mark.parametrize(
+@pytest.mark.parametrize(
     "epoca, lr_esperada",
     [
         (0, 0.001),
