@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageFilter
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, confusion_matrix
 
 from .config import AUGMENTATION_CONFIG
 
 AUG = {
-    'rotation_range': AUGMENTATION_CONFIG['rango_rotacion'],
-    'width_shift_range': AUGMENTATION_CONFIG['desplazamiento_horizontal'],
-    'height_shift_range': AUGMENTATION_CONFIG['desplazamiento_vertical'],
-    'zoom_range': AUGMENTATION_CONFIG['rango_zoom'],
-    'horizontal_flip': AUGMENTATION_CONFIG['voltear_horizontal'],
-    'vertical_flip': AUGMENTATION_CONFIG['voltear_vertical'],
+    'rotation_range': AUGMENTATION_CONFIG.get('rango_rotacion', 0),
+    'width_shift_range': AUGMENTATION_CONFIG.get('desplazamiento_horizontal', 0),
+    'height_shift_range': AUGMENTATION_CONFIG.get('desplazamiento_vertical', 0),
+    'zoom_range': AUGMENTATION_CONFIG.get('rango_zoom', 0),
+    'horizontal_flip': AUGMENTATION_CONFIG.get('voltear_horizontal', False),
+    'vertical_flip': AUGMENTATION_CONFIG.get('voltear_vertical', False),
+    'blur_radius': AUGMENTATION_CONFIG.get('radio_blur', 0),
+    'noise_level': AUGMENTATION_CONFIG.get('nivel_ruido', 0),
 }
 
 
@@ -30,16 +32,21 @@ def denormalize_image(images: np.ndarray) -> np.ndarray:
 
 
 def apply_augmentation(image: np.ndarray) -> np.ndarray:
-    """Aplicar augmentacion sencilla a ``image`` usando configuracion global."""
+    """Aplicar augmentacion agresiva a ``image`` usando configuracion global.
+
+    Incluye rotación, desplazamiento, zoom, flips, blur gaussiano y ruido gaussiano.
+    """
     if image.ndim == 2:
         pil_img = Image.fromarray(image, mode='L')
     else:
         pil_img = Image.fromarray(image)
 
+    # Rotación agresiva
     if AUG['rotation_range'] > 0:
         angle = np.random.uniform(-AUG['rotation_range'], AUG['rotation_range'])
         pil_img = pil_img.rotate(angle, fillcolor=0)
 
+    # Desplazamiento horizontal
     if AUG['width_shift_range'] > 0:
         width, height = pil_img.size
         shift_x = int(np.random.uniform(-AUG['width_shift_range'] * width, AUG['width_shift_range'] * width))
@@ -47,6 +54,7 @@ def apply_augmentation(image: np.ndarray) -> np.ndarray:
         crop_box = (shift_x, 0, width + shift_x, height) if shift_x > 0 else (0, 0, width, height)
         pil_img = pil_img.crop(crop_box)
 
+    # Desplazamiento vertical
     if AUG['height_shift_range'] > 0:
         width, height = pil_img.size
         shift_y = int(np.random.uniform(-AUG['height_shift_range'] * height, AUG['height_shift_range'] * height))
@@ -54,6 +62,7 @@ def apply_augmentation(image: np.ndarray) -> np.ndarray:
         crop_box = (0, shift_y, width, height + shift_y) if shift_y > 0 else (0, 0, width, height)
         pil_img = pil_img.crop(crop_box)
 
+    # Zoom
     if AUG['zoom_range'] > 0:
         zoom = 1 + np.random.uniform(-AUG['zoom_range'], AUG['zoom_range'])
         width, height = pil_img.size
@@ -71,13 +80,28 @@ def apply_augmentation(image: np.ndarray) -> np.ndarray:
             padding = (border_x_left, border_y_top, border_x_right, border_y_bottom)
             pil_img = ImageOps.expand(pil_img, border=padding, fill=0)
 
+    # Flips horizontales y verticales
     if AUG['horizontal_flip'] and np.random.random() > 0.5:
         pil_img = pil_img.transpose(Image.FLIP_LEFT_RIGHT)
 
     if AUG['vertical_flip'] and np.random.random() > 0.5:
         pil_img = pil_img.transpose(Image.FLIP_TOP_BOTTOM)
 
-    return np.array(pil_img)
+    # Blur gaussiano agresivo
+    if AUG['blur_radius'] > 0:
+        radius = np.random.uniform(0, AUG['blur_radius'])
+        pil_img = pil_img.filter(ImageFilter.GaussianBlur(radius))
+
+    # Convertir a array para aplicar ruido
+    img_array = np.array(pil_img, dtype=np.float32)
+
+    # Ruido gaussiano agresivo
+    if AUG['noise_level'] > 0:
+        noise = np.random.normal(0, AUG['noise_level'] * 255, img_array.shape)
+        img_array += noise
+        img_array = np.clip(img_array, 0, 255)
+
+    return img_array.astype(np.uint8)
 
 
 def plot_images(images, labels, label_map, num_images: int = 16, figsize=(12, 8)) -> None:

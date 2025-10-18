@@ -17,14 +17,16 @@ data_config:
   usar_augmentacion: true
   semilla: 42
 
-# Configuración de aumento de datos
+# Configuración de aumento de datos (Data Augmentation más agresivo)
 augmentation_config:
-  rango_rotacion: 15
+  rango_rotacion: 30  # Rotación más agresiva: ±30 grados
   desplazamiento_horizontal: 0.1
   desplazamiento_vertical: 0.1
   rango_zoom: 0.1
   voltear_horizontal: false
   voltear_vertical: false
+  radio_blur: 1.5  # Desenfoque gaussiano con radio hasta 1.5
+  nivel_ruido: 0.2  # Ruido gaussiano con nivel 0.2
 
 # Rutas del proyecto
 paths:
