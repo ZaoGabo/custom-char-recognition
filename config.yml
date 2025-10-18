@@ -11,6 +11,19 @@ network_config:
   tamano_lote: 32  # Lotes más pequeños para mejor generalización
   epocas: 200  # Más épocas para mejor entrenamiento
 
+  # BatchNormalization - Normaliza activaciones entre capas
+  use_batch_norm: true  # ✅ ACTIVADO
+
+  # Early Stopping - Detiene entrenamiento si no mejora
+  early_stopping_patience: 15  # ✅ ACTIVADO - Espera 15 épocas sin mejora
+  early_stopping_min_delta: 0.001  # ✅ ACTIVADO - Mejora mínima requerida
+
+# Learning Rate Scheduling - Reduce tasa de aprendizaje progresivamente
+lr_scheduler_config:
+  tipo: step_decay  # ✅ ACTIVADO - Tipo de scheduler
+  tasa_decaimento: 0.5  # ✅ ACTIVADO - Reduce LR a la mitad
+  epocas_decaimento: 30  # ✅ ACTIVADO - Cada 30 épocas
+
 # Configuración de datos
 data_config:
   tamano_imagen: [28, 28]  # Alto x Ancho
