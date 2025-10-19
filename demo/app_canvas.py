@@ -42,60 +42,80 @@ def preprocesar_imagen_canvas(imagen_array: np.ndarray) -> np.ndarray:
     """
     Preprocesar imagen del canvas para que coincida con el entrenamiento.
 
-    Pasos críticos:
-    1. Convertir a escala de grises
-    2. Invertir colores solo si es necesario (detectar automáticamente)
-    3. Centrar el contenido
+    Las imágenes de entrenamiento son: fondo negro (0) y texto blanco (255).
+    El canvas dibuja con fondo negro y trazos blancos.
+    
+    Pasos:
+    1. Extraer la imagen en escala de grises (RGB, no alpha)
+    2. Encontrar y recortar el contenido dibujado
+    3. Centrar en una imagen cuadrada con padding
     4. Redimensionar a 28x28
     5. Normalizar [0, 1]
     """
-    # Convertir RGBA a escala de grises
+    # El canvas genera RGBA. Extraemos los canales RGB (ignoramos alpha)
     if imagen_array.shape[-1] == 4:
-        # Tomar solo el canal alpha (lo dibujado)
-        imagen_gray = imagen_array[:, :, 3]
+        # Extraer RGB y convertir a escala de grises
+        # Los trazos blancos tienen RGB = (255, 255, 255)
+        # El fondo negro tiene RGB = (0, 0, 0)
+        imagen_rgb = imagen_array[:, :, :3]
+        imagen_gray = np.mean(imagen_rgb, axis=2).astype(np.uint8)
     else:
-        # Promediar canales RGB
-        imagen_gray = np.mean(imagen_array[:, :, :3], axis=2).astype(np.uint8)
+        imagen_gray = imagen_array.astype(np.uint8)
 
-    # Convertir a imagen PIL para procesamiento
-    imagen_pil = Image.fromarray(imagen_gray, mode='L')
-
-    # Detectar si necesitamos invertir (si el fondo es más claro que el contenido)
-    arr_temp = np.array(imagen_pil, dtype=np.uint8)
-    promedio = np.mean(arr_temp)
-
-    # Si el promedio es alto, significa fondo claro (necesitamos invertir)
-    # Para el canvas (fondo negro, trazos blancos) el promedio será bajo, por lo que no invertimos.
-    if promedio > 127:
-        imagen_pil = ImageOps.invert(imagen_pil)
-
-    # Encontrar el bounding box del contenido para centrarlo
-    bbox = imagen_pil.getbbox()
-
-    if bbox is None:
-        # No hay contenido dibujado
+    # Verificar si hay contenido dibujado
+    if np.max(imagen_gray) < 10:
+        # No hay contenido
         return np.zeros(784, dtype=np.float32)
 
-    # Recortar al contenido y agregar padding
-    imagen_recortada = imagen_pil.crop(bbox)
-
-    # Calcular el tamaño del cuadrado con padding del 20%
-    ancho, alto = imagen_recortada.size
+    # Encontrar el bounding box del contenido (píxeles blancos)
+    threshold = 30  # Píxeles > 30 se consideran "dibujo"
+    mascara = imagen_gray > threshold
+    
+    if not np.any(mascara):
+        return np.zeros(784, dtype=np.float32)
+    
+    # Encontrar los límites del contenido
+    filas = np.any(mascara, axis=1)
+    columnas = np.any(mascara, axis=0)
+    
+    indices_filas = np.where(filas)[0]
+    indices_columnas = np.where(columnas)[0]
+    
+    if len(indices_filas) == 0 or len(indices_columnas) == 0:
+        return np.zeros(784, dtype=np.float32)
+    
+    y_min, y_max = indices_filas[0], indices_filas[-1]
+    x_min, x_max = indices_columnas[0], indices_columnas[-1]
+    
+    # Recortar al contenido
+    imagen_recortada = imagen_gray[y_min:y_max+1, x_min:x_max+1]
+    
+    # Crear imagen cuadrada con padding
+    alto, ancho = imagen_recortada.shape
     tamano_max = max(ancho, alto)
-    tamano_nuevo = int(tamano_max * 1.4)  # Agregar 40% de padding
+    
+    # Agregar 20% de padding
+    tamano_nuevo = int(tamano_max * 1.2)
+    if tamano_nuevo < 20:
+        tamano_nuevo = 20
 
-    # Crear imagen cuadrada con fondo negro
-    imagen_cuadrada = Image.new('L', (tamano_nuevo, tamano_nuevo), color=0)
+    # Crear imagen cuadrada con fondo negro (0)
+    imagen_cuadrada = np.zeros((tamano_nuevo, tamano_nuevo), dtype=np.uint8)
 
-    # Pegar la imagen recortada en el centro
-    offset_x = (tamano_nuevo - ancho) // 2
+    # Calcular offsets para centrar
     offset_y = (tamano_nuevo - alto) // 2
-    imagen_cuadrada.paste(imagen_recortada, (offset_x, offset_y))
+    offset_x = (tamano_nuevo - ancho) // 2
+    
+    # Pegar la imagen recortada en el centro
+    imagen_cuadrada[offset_y:offset_y+alto, offset_x:offset_x+ancho] = imagen_recortada
 
+    # Convertir a PIL para redimensionar con buena calidad
+    imagen_pil = Image.fromarray(imagen_cuadrada, mode='L')
+    
     # Redimensionar a 28x28 con antialiasing
-    imagen_final = imagen_cuadrada.resize((28, 28), Image.Resampling.LANCZOS)
+    imagen_final = imagen_pil.resize((28, 28), Image.Resampling.LANCZOS)
 
-    # Convertir a array y normalizar
+    # Convertir a array y normalizar [0, 1]
     array_final = np.array(imagen_final, dtype=np.float32) / 255.0
 
     return array_final.flatten()
@@ -160,7 +180,7 @@ def main() -> None:
             st.write(f"**Arquitectura:** {modelo.capas}")
             st.write(f"**Activaciones:** {modelo.activaciones}")
         with col2:
-            st.write(f"**Clases:** {modelo.capas[-1]} caracteres (A-Z, a-z)")
+            st.write(f"**Clases:** {modelo.capas[-1]} caracteres (A-Z, a-z, 0-9, !@#...)")
             st.write(f"**BatchNorm:** {'✅ Sí' if modelo.use_batch_norm else '❌ No'}")
 
     st.markdown('---')
@@ -258,8 +278,10 @@ def main() -> None:
 
             # Mostrar ejemplos
             st.markdown('#### 📝 Caracteres soportados:')
-            st.markdown('**Mayúsculas:** A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z')
-            st.markdown('**Minúsculas:** a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z')
+            st.markdown('**Mayúsculas:** A-Z (26 letras)')
+            st.markdown('**Minúsculas:** a-z (26 letras)')
+            st.markdown('**Números:** 0-9 (10 dígitos)')
+            st.markdown('**Especiales:** ! @ # $ % & * ( ) - + = , . ; : \' " < > / ? | ~ `')
 
     st.markdown('---')
     st.markdown('### 💡 Consejos de Uso')

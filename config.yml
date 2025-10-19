@@ -30,16 +30,16 @@ data_config:
   usar_augmentacion: true
   semilla: 42
 
-# Configuracion de aumento de datos (MINIMO - solo variaciones naturales)
+# Configuracion de aumento de datos (AGRESIVO - para reconocer dibujos a mano con variaciones)
 augmentation_config:
-  rango_rotacion: 8  # ±8 grados (mas conservador)
-  desplazamiento_horizontal: 0.06
-  desplazamiento_vertical: 0.06
-  rango_zoom: 0.06
-  voltear_horizontal: false
+  rango_rotacion: 15  # ±15 grados para soportar inclinaciones
+  desplazamiento_horizontal: 0.15  # 15% de desplazamiento
+  desplazamiento_vertical: 0.15  # 15% de desplazamiento
+  rango_zoom: 0.15  # Zoom ±15%
+  voltear_horizontal: false  # No voltear letras (cambiaría significado)
   voltear_vertical: false
-  radio_blur: 0.2  # Blur muy sutil
-  nivel_ruido: 0.01  # Ruido minimo
+  radio_blur: 0.5  # Blur moderado para simular trazos imperfectos
+  nivel_ruido: 0.03  # Ruido moderado
 
 # Rutas del proyecto
 paths:
@@ -53,8 +53,9 @@ logging_config:
   nivel: 'INFO'
   formato: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
-# Etiquetas personalizadas (A-Z mayusculas y a-z minusculas)
+# Etiquetas personalizadas (A-Z mayusculas, a-z minusculas, 0-9 numeros, y caracteres especiales)
 custom_labels:
+  # Mayusculas A-Z
   - 'A'
   - 'B'
   - 'C'
@@ -81,6 +82,7 @@ custom_labels:
   - 'X'
   - 'Y'
   - 'Z'
+  # Minusculas a-z
   - 'a'
   - 'b'
   - 'c'
@@ -107,4 +109,48 @@ custom_labels:
   - 'x'
   - 'y'
   - 'z'
+  # Numeros 0-9
+  - '0'
+  - '1'
+  - '2'
+  - '3'
+  - '4'
+  - '5'
+  - '6'
+  - '7'
+  - '8'
+  - '9'
+  # Caracteres especiales comunes
+  - '!'
+  - '@'
+  - '#'
+  - '$'
+  - '%'
+  - '&'
+  - '*'
+  - '('
+  - ')'
+  - '-'
+  - '_'
+  - '+'
+  - '='
+  - '['
+  - ']'
+  - '{'
+  - '}'
+  - ';'
+  - ':'
+  - "'"
+  - '"'
+  - ','
+  - '.'
+  - '<'
+  - '>'
+  - '/'
+  - '?'
+  - '|'
+  - '~'
+  - '`'
+  - '¡'
+  - '¿'
 

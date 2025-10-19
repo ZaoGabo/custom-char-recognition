@@ -52,10 +52,33 @@ class DataLoader:
 
     def _mapear_carpeta_a_etiqueta(self, nombre_carpeta: str) -> str:
         """Convertir un nombre de carpeta a la etiqueta real."""
+        # Mapeo inverso de nombres de carpetas a caracteres reales
+        mapeo_inverso = {
+            # Dígitos
+            '0_digit': '0', '1_digit': '1', '2_digit': '2', '3_digit': '3', '4_digit': '4',
+            '5_digit': '5', '6_digit': '6', '7_digit': '7', '8_digit': '8', '9_digit': '9',
+            # Caracteres especiales
+            'exclamation': '!', 'at': '@', 'hash': '#', 'dollar': '$', 'percent': '%',
+            'ampersand': '&', 'asterisk': '*', 'lparen': '(', 'rparen': ')',
+            'minus': '-', 'underscore': '_', 'plus': '+', 'equals': '=',
+            'lbracket': '[', 'rbracket': ']', 'lbrace': '{', 'rbrace': '}',
+            'semicolon': ';', 'colon': ':', 'quote': "'", 'dquote': '"',
+            'comma': ',', 'period': '.', 'less': '<', 'greater': '>',
+            'slash': '/', 'question': '?', 'pipe': '|', 'tilde': '~',
+            'backtick': '`', 'iexclamation': '¡', 'iquestion': '¿',
+        }
+        
+        # Si está en el mapeo inverso, devolver el carácter real
+        if nombre_carpeta in mapeo_inverso:
+            return mapeo_inverso[nombre_carpeta]
+        
+        # Para letras mayúsculas y minúsculas
         if nombre_carpeta.endswith("_upper"):
             return nombre_carpeta[0].upper()
         if nombre_carpeta.endswith("_lower"):
             return nombre_carpeta[0].lower()
+        
+        # Si no coincide con nada, devolver tal cual
         return nombre_carpeta
 
     def _iterar_archivos(self) -> Iterator[Tuple[str, int]]:

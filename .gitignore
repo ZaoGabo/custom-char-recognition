@@ -394,6 +394,11 @@ recreate_model.py
 train_simple.py
 create_simple_model.py
 
+# Scripts de descarga de datasets (configuración local)
+src/scripts/descargar_kaggle_az.py
+src/scripts/descargar_emnist.py
+INSTRUCCIONES_KAGGLE.md
+
 # Archivos de backup
 *.bak
 *.backup
@@ -409,6 +414,11 @@ config.ini
 secrets.json
 credentials.json
 api_keys.txt
+
+# Kaggle API credentials
+.kaggle/
+kaggle.json
+~/.kaggle/kaggle.json
 
 # -----------------------------------------------------------------------------
 # MANTENER ARCHIVOS IMPORTANTES
