@@ -1,45 +1,45 @@
-# Configuración del Proyecto de Reconocimiento de Caracteres
+# Configuracion del Proyecto de Reconocimiento de Caracteres
 
-# Configuración de la red neuronal
+# Configuracion de la red neuronal
 network_config:
-  capas: [256, 128, 64]  # Más capas y neuronas
-  activaciones: ['relu', 'relu', 'relu', 'softmax']  # Funciones de activación
-  oculta_neuronas: 256  # Neuronas en capa oculta (fallback)
-  tasa_aprendizaje: 0.0005  # Tasa de aprendizaje más baja para mejor convergencia
-  lambda_l2: 0.00001  # Regularización L2 reducida
-  dropout_rate: 0.2  # Menos dropout para aprender mejor
-  tamano_lote: 32  # Lotes más pequeños para mejor generalización
-  epocas: 200  # Más épocas para mejor entrenamiento
+  capas: [512, 384, 256, 128]  # Red mas profunda para mejor discriminacion
+  activaciones: ['relu', 'relu', 'relu', 'relu', 'softmax']
+  oculta_neuronas: 512
+  tasa_aprendizaje: 0.0008  # Balance entre velocidad y estabilidad
+  lambda_l2: 0.00001
+  dropout_rate: 0.1  # Menos dropout para mas confianza
+  tamano_lote: 32
+  epocas: 350  # Mas epocas para convergencia completa
 
   # BatchNormalization - Normaliza activaciones entre capas
-  use_batch_norm: true  # ✅ ACTIVADO
+  use_batch_norm: true
 
   # Early Stopping - Detiene entrenamiento si no mejora
-  early_stopping_patience: 15  # ✅ ACTIVADO - Espera 15 épocas sin mejora
-  early_stopping_min_delta: 0.001  # ✅ ACTIVADO - Mejora mínima requerida
+  early_stopping_patience: 25  # Mas paciencia para encontrar mejor modelo
+  early_stopping_min_delta: 0.0003  # Mas sensible a mejoras pequenas
 
 # Learning Rate Scheduling - Reduce tasa de aprendizaje progresivamente
 lr_scheduler_config:
-  tipo: step_decay  # ✅ ACTIVADO - Tipo de scheduler
-  tasa_decaimento: 0.5  # ✅ ACTIVADO - Reduce LR a la mitad
-  epocas_decaimento: 30  # ✅ ACTIVADO - Cada 30 épocas
+  tipo: step_decay
+  tasa_decaimento: 0.5
+  epocas_decaimento: 50  # Decay cada 50 epocas para aprendizaje mas suave
 
-# Configuración de datos
+# Configuracion de datos
 data_config:
-  tamano_imagen: [28, 28]  # Alto x Ancho
+  tamano_imagen: [28, 28]
   usar_augmentacion: true
   semilla: 42
 
-# Configuración de aumento de datos (Data Augmentation más agresivo)
+# Configuracion de aumento de datos (MINIMO - solo variaciones naturales)
 augmentation_config:
-  rango_rotacion: 30  # Rotación más agresiva: ±30 grados
-  desplazamiento_horizontal: 0.1
-  desplazamiento_vertical: 0.1
-  rango_zoom: 0.1
+  rango_rotacion: 8  # ±8 grados (mas conservador)
+  desplazamiento_horizontal: 0.06
+  desplazamiento_vertical: 0.06
+  rango_zoom: 0.06
   voltear_horizontal: false
   voltear_vertical: false
-  radio_blur: 1.5  # Desenfoque gaussiano con radio hasta 1.5
-  nivel_ruido: 0.2  # Ruido gaussiano con nivel 0.2
+  radio_blur: 0.2  # Blur muy sutil
+  nivel_ruido: 0.01  # Ruido minimo
 
 # Rutas del proyecto
 paths:
@@ -48,12 +48,12 @@ paths:
   modelos: 'models'
   logs: 'logs'
 
-# Configuración de logging
+# Configuracion de logging
 logging_config:
   nivel: 'INFO'
   formato: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 
-# Etiquetas personalizadas (A-Z mayúsculas y a-z minúsculas)
+# Etiquetas personalizadas (A-Z mayusculas y a-z minusculas)
 custom_labels:
   - 'A'
   - 'B'
@@ -107,3 +107,4 @@ custom_labels:
   - 'x'
   - 'y'
   - 'z'
+
