@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -62,14 +63,15 @@ def _mostrar_top_predicciones(probabilidades: np.ndarray) -> None:
         with col_idx:
             st.write(f"**{posicion}. '{etiqueta}'**")
         with col_bar:
-            st.progress(probabilidad)
+            barra = max(0.0, min(1.0, probabilidad))
+            st.progress(barra)
         with col_val:
             st.write(f"{probabilidad:.3f}")
 
 
 def main() -> None:
     """Punto de entrada de la interfaz Streamlit."""
-    st.set_page_config(page_title='Reconocimiento de Caracteres', page_icon='✏', layout='centered')
+    st.set_page_config(page_title='Reconocimiento de Caracteres', page_icon='NN', layout='centered')
     st.title('Reconocimiento de Caracteres Personalizados')
     
     modelo = cargar_modelo_entrenado()

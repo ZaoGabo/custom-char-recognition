@@ -25,5 +25,3 @@ tqdm>=4.62.0
 # Optional: For advanced visualizations
 seaborn>=0.11.0
 
-# Optional: Alternative web framework
-flask>=2.0.0
