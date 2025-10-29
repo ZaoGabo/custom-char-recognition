@@ -40,44 +40,42 @@ def cargar_modelo_entrenado():
 
 def preprocesar_imagen_canvas(imagen_array: np.ndarray) -> np.ndarray:
     """
-    Preprocesar imagen del canvas para que coincida con el entrenamiento.
-
-    Las imágenes de entrenamiento son: fondo negro (0) y texto blanco (255).
-    El canvas dibuja con fondo negro y trazos blancos.
+    Preprocesar imagen del canvas EXACTAMENTE como EMNIST.
     
-    Pasos:
-    1. Extraer la imagen en escala de grises (RGB, no alpha)
-    2. Encontrar y recortar el contenido dibujado
-    3. Centrar en una imagen cuadrada con padding
-    4. Redimensionar a 28x28
-    5. Normalizar [0, 1]
+    EMNIST tiene: fondo negro (0) y texto blanco (255)
+    Canvas dibuja: fondo negro (0) y trazos blancos (255)
+    
+    Pasos (iguales a EMNIST):
+    1. Extraer escala de grises
+    2. Encontrar bounding box del contenido
+    3. Recortar y centrar con aspect ratio preservado
+    4. Padding adaptativo (20% del tamaño)
+    5. Resize a 20x20
+    6. Centrar en imagen 28x28
+    7. Normalizar [0, 1]
+    8. Aplicar suavizado gaussiano ligero
     """
-    # El canvas genera RGBA. Extraemos los canales RGB (ignoramos alpha)
+    # Extraer escala de grises
     if imagen_array.shape[-1] == 4:
-        # Extraer RGB y convertir a escala de grises
-        # Los trazos blancos tienen RGB = (255, 255, 255)
-        # El fondo negro tiene RGB = (0, 0, 0)
         imagen_rgb = imagen_array[:, :, :3]
         imagen_gray = np.mean(imagen_rgb, axis=2).astype(np.uint8)
     else:
         imagen_gray = imagen_array.astype(np.uint8)
 
-    # Verificar si hay contenido dibujado
+    # Verificar contenido
     if np.max(imagen_gray) < 10:
-        # No hay contenido
         return np.zeros(784, dtype=np.float32)
 
-    # Encontrar el bounding box del contenido (píxeles blancos)
-    threshold = 30  # Píxeles > 30 se consideran "dibujo"
+    # Bounding box con threshold bajo (más sensible)
+    threshold = 20  # Más sensible a trazos suaves
     mascara = imagen_gray > threshold
     
     if not np.any(mascara):
         return np.zeros(784, dtype=np.float32)
     
-    # Encontrar los límites del contenido
+    # Encontrar límites
     filas = np.any(mascara, axis=1)
     columnas = np.any(mascara, axis=0)
-    
     indices_filas = np.where(filas)[0]
     indices_columnas = np.where(columnas)[0]
     
@@ -87,38 +85,51 @@ def preprocesar_imagen_canvas(imagen_array: np.ndarray) -> np.ndarray:
     y_min, y_max = indices_filas[0], indices_filas[-1]
     x_min, x_max = indices_columnas[0], indices_columnas[-1]
     
-    # Recortar al contenido
+    # Recortar
     imagen_recortada = imagen_gray[y_min:y_max+1, x_min:x_max+1]
     
-    # Crear imagen cuadrada con padding
+    # === IGUAL A EMNIST: Preservar aspect ratio ===
     alto, ancho = imagen_recortada.shape
-    tamano_max = max(ancho, alto)
     
-    # Agregar 20% de padding
-    tamano_nuevo = int(tamano_max * 1.2)
-    if tamano_nuevo < 20:
-        tamano_nuevo = 20
-
-    # Crear imagen cuadrada con fondo negro (0)
-    imagen_cuadrada = np.zeros((tamano_nuevo, tamano_nuevo), dtype=np.uint8)
-
-    # Calcular offsets para centrar
-    offset_y = (tamano_nuevo - alto) // 2
-    offset_x = (tamano_nuevo - ancho) // 2
+    # Calcular tamaño objetivo (20x20 como EMNIST, luego centrar en 28x28)
+    tamano_objetivo = 20
     
-    # Pegar la imagen recortada en el centro
-    imagen_cuadrada[offset_y:offset_y+alto, offset_x:offset_x+ancho] = imagen_recortada
-
-    # Convertir a PIL para redimensionar con buena calidad
-    imagen_pil = Image.fromarray(imagen_cuadrada, mode='L')
+    # Escalar preservando aspect ratio
+    if alto > ancho:
+        nuevo_alto = tamano_objetivo
+        nuevo_ancho = int(ancho * tamano_objetivo / alto)
+    else:
+        nuevo_ancho = tamano_objetivo
+        nuevo_alto = int(alto * tamano_objetivo / ancho)
     
-    # Redimensionar a 28x28 con antialiasing
-    imagen_final = imagen_pil.resize((28, 28), Image.Resampling.LANCZOS)
+    # Evitar tamaños 0
+    nuevo_alto = max(1, nuevo_alto)
+    nuevo_ancho = max(1, nuevo_ancho)
+    
+    # Redimensionar a tamaño intermedio
+    imagen_pil = Image.fromarray(imagen_recortada)
+    imagen_escalada = imagen_pil.resize((nuevo_ancho, nuevo_alto), Image.Resampling.LANCZOS)
+    imagen_escalada_np = np.array(imagen_escalada, dtype=np.uint8)
+    
+    # Centrar en imagen 28x28 (como EMNIST)
+    imagen_final = np.zeros((28, 28), dtype=np.uint8)
+    offset_y = (28 - nuevo_alto) // 2
+    offset_x = (28 - nuevo_ancho) // 2
+    imagen_final[offset_y:offset_y+nuevo_alto, offset_x:offset_x+nuevo_ancho] = imagen_escalada_np
+    
+    # Aplicar Gaussian Blur ligero (como EMNIST tiene variaciones naturales)
+    imagen_pil_final = Image.fromarray(imagen_final)
+    from PIL import ImageFilter
+    imagen_pil_final = imagen_pil_final.filter(ImageFilter.GaussianBlur(radius=0.5))
+    imagen_final = np.array(imagen_pil_final, dtype=np.float32)
+    
+    # Normalizar [0, 1]
+    imagen_final = imagen_final / 255.0
+    
+    # Aplicar threshold suave para limpiar ruido
+    imagen_final = np.where(imagen_final > 0.05, imagen_final, 0)
 
-    # Convertir a array y normalizar [0, 1]
-    array_final = np.array(imagen_final, dtype=np.float32) / 255.0
-
-    return array_final.flatten()
+    return imagen_final.flatten()
 
 
 def mostrar_top_predicciones(probabilidades: np.ndarray, top_k: int = 5) -> None:
@@ -227,9 +238,16 @@ def main() -> None:
                 st.warning('⚠️ No se detectó ningún dibujo. Por favor, dibuja un carácter.')
             else:
                 # Mostrar imagen preprocesada
-                with st.expander('🔎 Ver imagen procesada (28x28)'):
-                    img_procesada = entrada.reshape(28, 28)
-                    st.image(img_procesada, caption='Imagen enviada al modelo', width=200)
+                with st.expander('🔎 Ver imagen procesada (28x28)', expanded=True):
+                    col_img1, col_img2 = st.columns(2)
+                    with col_img1:
+                        st.markdown("**Original (recortada)**")
+                        img_procesada = entrada.reshape(28, 28)
+                        st.image(img_procesada, caption='Imagen enviada al modelo', width=200, clamp=True)
+                    with col_img2:
+                        st.markdown("**Con threshold**")
+                        img_threshold = np.where(img_procesada > 0.3, img_procesada, 0)
+                        st.image(img_threshold, caption='Threshold aplicado', width=200, clamp=True)
 
                 # Hacer predicción
                 with st.spinner('Analizando...'):
@@ -264,14 +282,35 @@ def main() -> None:
                 mostrar_top_predicciones(probabilidades, top_k=5)
 
                 # Consejos si la confianza es baja
-                if confianza < 0.5:
+                if confianza < 0.6:
                     st.markdown('---')
+                    st.warning(f'''
+                    **⚠️ Confianza baja ({confianza*100:.1f}%) - Consejos:**
+                    
+                    🎯 **Para mejor reconocimiento:**
+                    - **Tamaño**: Dibuja el carácter ocupando el 70-80% del canvas
+                    - **Centrado**: Centra bien el dibujo (no en las esquinas)
+                    - **Grosor**: Usa grosor 12-18 (deslizador arriba)
+                    - **Continuidad**: Traza líneas continuas, evita segmentos
+                    - **Claridad**: Respeta la forma del carácter (O circular, 0 ovalado)
+                    
+                    🔤 **Caracteres similares confundibles:**
+                    - **0 vs O/o**: El cero (0) es más ovalado/alargado
+                    - **1 vs I/l**: El uno (1) puede tener base, la i/I tienen puntos
+                    - **5 vs S**: El cinco (5) tiene ángulos, la S es curva
+                    - **8 vs B**: El ocho (8) es simétrico, la B tiene línea vertical
+                    
+                    💡 **Prueba:**
+                    1. Borrar y redibujar más grande
+                    2. Ver las predicciones top 5 (abajo)
+                    3. Ajustar el grosor del trazo
+                    ''')
+                elif confianza < 0.8:
                     st.info('''
-                    **💡 Consejos para mejorar:**
-                    - Dibuja el carácter más grande
-                    - Centra el dibujo en el canvas
-                    - Usa trazos más gruesos
-                    - Asegúrate de que el carácter sea claro
+                    💡 **Confianza media - Sugerencias:**
+                    - Dibuja más claro y definido
+                    - Asegúrate de centrar bien el carácter
+                    - Verifica el top 5 para ver alternativas
                     ''')
         else:
             st.info('👈 Dibuja un carácter en el canvas y presiona "Predecir"')

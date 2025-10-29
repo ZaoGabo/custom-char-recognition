@@ -13,16 +13,17 @@ from src.config import DATA_CONFIG, NETWORK_CONFIG, PATHS
 from src.data_loader import DataLoader
 from src.label_map import DEFAULT_LABEL_MAP
 from src.network import NeuralNetwork
-from src.scripts.generar_imagenes_sinteticas import generar_imagenes_sinteticas
 
 
 def _asegurar_datos() -> None:
-    """Verificar que existan datos en ``data/raw`` y generarlos si es necesario."""
+    """Verificar que existan datos en ``data/raw``."""
     ruta_raw = Path(PATHS['datos_crudos'])
     ruta_raw.mkdir(parents=True, exist_ok=True)
     if not any(ruta_raw.iterdir()):
-        print('data/raw esta vacio. Generando imagenes sinteticas...')
-        generar_imagenes_sinteticas()
+        raise FileNotFoundError(
+            'data/raw está vacío. Por favor, descarga el dataset EMNIST primero.\n'
+            'Ejecuta: python -m src.scripts.descargar_emnist'
+        )
 
 def _one_hot(labels: np.ndarray, num_clases: int) -> np.ndarray:
     """Codificar un vector de etiquetas en formato one-hot."""
