@@ -42,38 +42,39 @@ def preprocesar_imagen_canvas(imagen_array: np.ndarray) -> np.ndarray:
     """
     Preprocesar imagen del canvas EXACTAMENTE como EMNIST.
     
-    EMNIST tiene: fondo negro (0) y texto blanco (255)
-    Canvas dibuja: fondo negro (0) y trazos blancos (255)
+    EMNIST stats de referencia (desde imagen real):
+    - Shape: (28, 28)
+    - Min: 0.000, Max: 1.000
+    - Mean: ~0.16, Std: ~0.33
+    - Fondo negro (0.0), caracteres blancos (~1.0)
     
-    Pasos (iguales a EMNIST):
-    1. Extraer escala de grises
-    2. Encontrar bounding box del contenido
-    3. Recortar y centrar con aspect ratio preservado
-    4. Padding adaptativo (20% del tamaño)
-    5. Resize a 20x20
-    6. Centrar en imagen 28x28
-    7. Normalizar [0, 1]
-    8. Aplicar suavizado gaussiano ligero
+    Pasos críticos:
+    1. Extraer canal alfa (donde está el dibujo)
+    2. Invertir (canvas dibuja blanco, necesitamos valores altos donde hay tinta)
+    3. Bounding box + crop
+    4. Resize preservando aspect ratio
+    5. Centrar en 28x28
+    6. Normalizar [0, 1]
     """
-    # Extraer escala de grises
+    # Extraer canal alfa (4to canal) - donde está el trazo
     if imagen_array.shape[-1] == 4:
-        imagen_rgb = imagen_array[:, :, :3]
-        imagen_gray = np.mean(imagen_rgb, axis=2).astype(np.uint8)
+        # El canal alfa tiene el trazo (0 = transparente/fondo, 255 = trazo)
+        imagen_gray = imagen_array[:, :, 3].astype(np.uint8)
     else:
-        imagen_gray = imagen_array.astype(np.uint8)
+        imagen_gray = np.mean(imagen_array[:, :, :3], axis=2).astype(np.uint8)
 
     # Verificar contenido
     if np.max(imagen_gray) < 10:
         return np.zeros(784, dtype=np.float32)
 
-    # Bounding box con threshold bajo (más sensible)
-    threshold = 20  # Más sensible a trazos suaves
+    # Bounding box con threshold
+    threshold = 30  # Detectar trazos
     mascara = imagen_gray > threshold
     
     if not np.any(mascara):
         return np.zeros(784, dtype=np.float32)
     
-    # Encontrar límites
+    # Encontrar límites del contenido
     filas = np.any(mascara, axis=1)
     columnas = np.any(mascara, axis=0)
     indices_filas = np.where(filas)[0]
@@ -85,49 +86,49 @@ def preprocesar_imagen_canvas(imagen_array: np.ndarray) -> np.ndarray:
     y_min, y_max = indices_filas[0], indices_filas[-1]
     x_min, x_max = indices_columnas[0], indices_columnas[-1]
     
-    # Recortar
+    # Recortar al bounding box
     imagen_recortada = imagen_gray[y_min:y_max+1, x_min:x_max+1]
     
     # === IGUAL A EMNIST: Preservar aspect ratio ===
     alto, ancho = imagen_recortada.shape
     
-    # Calcular tamaño objetivo (20x20 como EMNIST, luego centrar en 28x28)
+    # Escalar para que quepa en 20x20 (dejando espacio para centrar en 28x28)
     tamano_objetivo = 20
     
-    # Escalar preservando aspect ratio
     if alto > ancho:
         nuevo_alto = tamano_objetivo
-        nuevo_ancho = int(ancho * tamano_objetivo / alto)
+        nuevo_ancho = max(1, int(ancho * tamano_objetivo / alto))
     else:
         nuevo_ancho = tamano_objetivo
-        nuevo_alto = int(alto * tamano_objetivo / ancho)
+        nuevo_alto = max(1, int(alto * tamano_objetivo / ancho))
     
-    # Evitar tamaños 0
-    nuevo_alto = max(1, nuevo_alto)
-    nuevo_ancho = max(1, nuevo_ancho)
-    
-    # Redimensionar a tamaño intermedio
+    # Redimensionar
     imagen_pil = Image.fromarray(imagen_recortada)
     imagen_escalada = imagen_pil.resize((nuevo_ancho, nuevo_alto), Image.Resampling.LANCZOS)
-    imagen_escalada_np = np.array(imagen_escalada, dtype=np.uint8)
+    imagen_escalada_np = np.array(imagen_escalada, dtype=np.float32)
     
-    # Centrar en imagen 28x28 (como EMNIST)
-    imagen_final = np.zeros((28, 28), dtype=np.uint8)
+    # Centrar en imagen 28x28 (fondo negro)
+    imagen_final = np.zeros((28, 28), dtype=np.float32)
     offset_y = (28 - nuevo_alto) // 2
     offset_x = (28 - nuevo_ancho) // 2
     imagen_final[offset_y:offset_y+nuevo_alto, offset_x:offset_x+nuevo_ancho] = imagen_escalada_np
     
+    # El canvas ya dibuja correctamente (texto blanco en fondo negro)
+    # NO invertir colores - el modelo espera esto
+    # NO rotar - el modelo ya fue entrenado con las orientaciones correctas
+    # NO voltear - el modelo ya fue entrenado con las orientaciones correctas
+    
     # Aplicar Gaussian Blur ligero (como EMNIST tiene variaciones naturales)
-    imagen_pil_final = Image.fromarray(imagen_final)
+    imagen_pil_final = Image.fromarray(imagen_final.astype(np.uint8))
     from PIL import ImageFilter
     imagen_pil_final = imagen_pil_final.filter(ImageFilter.GaussianBlur(radius=0.5))
     imagen_final = np.array(imagen_pil_final, dtype=np.float32)
     
-    # Normalizar [0, 1]
+    # Normalizar [0, 1] - CRÍTICO para coincidir con EMNIST
     imagen_final = imagen_final / 255.0
     
-    # Aplicar threshold suave para limpiar ruido
-    imagen_final = np.where(imagen_final > 0.05, imagen_final, 0)
+    # Limpiar ruido de fondo (EMNIST tiene fondo perfectamente negro)
+    imagen_final = np.where(imagen_final > 0.05, imagen_final, 0.0)
 
     return imagen_final.flatten()
 
@@ -238,16 +239,37 @@ def main() -> None:
                 st.warning('⚠️ No se detectó ningún dibujo. Por favor, dibuja un carácter.')
             else:
                 # Mostrar imagen preprocesada
-                with st.expander('🔎 Ver imagen procesada (28x28)', expanded=True):
+                with st.expander('🔎 Ver imagen procesada (28x28) + Estadísticas', expanded=True):
+                    # Calcular estadísticas
+                    img_procesada = entrada.reshape(28, 28)
+                    stats_mean = float(np.mean(img_procesada))
+                    stats_std = float(np.std(img_procesada))
+                    stats_min = float(np.min(img_procesada))
+                    stats_max = float(np.max(img_procesada))
+                    
+                    # Referencia EMNIST
+                    st.info(f"""
+                    📊 **Estadísticas de tu imagen:**
+                    - Min: {stats_min:.3f}, Max: {stats_max:.3f}
+                    - Mean: {stats_mean:.3f}, Std: {stats_std:.3f}
+                    
+                    🎯 **Referencia EMNIST ideal:**
+                    - Min: 0.000, Max: 1.000
+                    - Mean: ~0.160, Std: ~0.330
+                    
+                    {'✅ ¡Buena similitud!' if abs(stats_mean - 0.16) < 0.1 and abs(stats_std - 0.33) < 0.15 else '⚠️ Diferencia significativa - intenta dibujar más grueso/delgado'}
+                    """)
+                    
                     col_img1, col_img2 = st.columns(2)
                     with col_img1:
-                        st.markdown("**Original (recortada)**")
-                        img_procesada = entrada.reshape(28, 28)
-                        st.image(img_procesada, caption='Imagen enviada al modelo', width=200, clamp=True)
+                        st.markdown("**Imagen Final (como ve el modelo)**")
+                        st.image(img_procesada, caption='Imagen normalizada 28x28', width=200, clamp=True)
+                        st.caption('📐 Centrada con aspect ratio preservado')
                     with col_img2:
-                        st.markdown("**Con threshold**")
+                        st.markdown("**Con threshold (limpieza)**")
                         img_threshold = np.where(img_procesada > 0.3, img_procesada, 0)
                         st.image(img_threshold, caption='Threshold aplicado', width=200, clamp=True)
+                        st.caption('✨ Ruido eliminado')
 
                 # Hacer predicción
                 with st.spinner('Analizando...'):

@@ -1,121 +1,147 @@
-"""Aplicacion web para probar el reconocimiento de caracteres personalizados."""
+"""
+Character Recognition Web Application
 
-from __future__ import annotations
+Production-ready Streamlit application for handwritten character recognition
+using a fine-tuned convolutional neural network (CNN v2).
 
-import json
+Model: CNN v2 Finetuned (83.80% validation accuracy)
+Classes: 94 characters (A-Z, a-z, 0-9, symbols)
+"""
 import sys
 from pathlib import Path
 
-import numpy as np
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import streamlit as st
-from PIL import Image, UnidentifiedImageError
+import numpy as np
+from PIL import Image
+from streamlit_drawable_canvas import st_canvas
 
-RUTA_RAIZ = Path(__file__).resolve().parent.parent
-if str(RUTA_RAIZ) not in sys.path:
-    sys.path.insert(0, str(RUTA_RAIZ))
+from src.cnn_predictor_v2_finetuned import CNNPredictor_v2_Finetuned
 
-from src.config import PATHS
-from src.label_map import DEFAULT_LABEL_MAP
-from src.network import NeuralNetwork
+
+st.set_page_config(
+    page_title="Character Recognition",
+    page_icon="🔤",
+    layout="centered"
+)
 
 
 @st.cache_resource
-def cargar_modelo_entrenado():
-    """Cargar el modelo entrenado usando el nuevo formato (JSON + npy)."""
-    modelo_dir = RUTA_RAIZ / PATHS['modelos'] / 'modelo_entrenado'
-    arquitectura_path = modelo_dir / "arquitectura.json"
-
-    if not arquitectura_path.exists():
-        st.error('No se encontro el archivo de arquitectura del modelo.')
-        st.info('Ejecute primero: `python -m src.trainer --force`')
-        return None
-
-    try:
-        modelo = NeuralNetwork.cargar_modelo(str(modelo_dir))
-    except (OSError, FileNotFoundError, json.JSONDecodeError) as exc:
-        st.error(f'Error cargando el modelo: {exc}')
-        return None
-
-    st.success('Modelo cargado exitosamente')
-    return modelo
+def load_model():
+    """Load CNN model. Cached for performance."""
+    return CNNPredictor_v2_Finetuned()
 
 
-def preprocesar_imagen(imagen_pil: Image.Image) -> np.ndarray:
-    """Convertir una imagen PIL en vector normalizado de 784 elementos."""
-    imagen = imagen_pil.convert('L').resize((28, 28))
-    return np.asarray(imagen, dtype=np.float32).flatten() / 255.0
-
-
-def _obtener_probabilidades(modelo, entrada: np.ndarray) -> np.ndarray:
-    """Obtener una matriz (1, clases) con probabilidades del modelo."""
-    salida = modelo.predecir_probabilidades(entrada)
-    return salida if salida.ndim == 2 else salida.reshape(1, -1)
-
-
-def _mostrar_top_predicciones(probabilidades: np.ndarray) -> None:
-    """Visualizar las cinco predicciones con mayor probabilidad."""
-    vector = probabilidades.flatten()
-    top_indices = np.argsort(vector)[-5:][::-1]
-    for posicion, indice in enumerate(top_indices, start=1):
-        etiqueta = DEFAULT_LABEL_MAP.get_label(int(indice))
-        probabilidad = float(vector[indice])
-        col_idx, col_bar, col_val = st.columns([1, 2, 1])
-        with col_idx:
-            st.write(f"**{posicion}. '{etiqueta}'**")
-        with col_bar:
-            barra = max(0.0, min(1.0, probabilidad))
-            st.progress(barra)
-        with col_val:
-            st.write(f"{probabilidad:.3f}")
-
-
-def main() -> None:
-    """Punto de entrada de la interfaz Streamlit."""
-    st.set_page_config(page_title='Reconocimiento de Caracteres', page_icon='NN', layout='centered')
-    st.title('Reconocimiento de Caracteres Personalizados')
+def preprocess_canvas(canvas_data: np.ndarray) -> np.ndarray:
+    """
+    Preprocess canvas drawing for model inference.
     
-    modelo = cargar_modelo_entrenado()
-    if modelo is None:
-        st.stop()
+    Args:
+        canvas_data: RGBA image from canvas (H, W, 4)
+    
+    Returns:
+        Normalized grayscale image (28, 28) in range [0, 1]
+    """
+    img_rgb = canvas_data[:, :, :3]
+    
+    img_pil = Image.fromarray(img_rgb.astype('uint8'))
+    img_gray = img_pil.convert('L')
+    img_resized = img_gray.resize((28, 28), Image.Resampling.LANCZOS)
+    
+    img_array = np.array(img_resized)
+    img_normalized = img_array.astype(np.float32) / 255.0
+    
+    return img_normalized
 
-    with st.expander('Informacion del Modelo'):
-        st.write(f"**Capas:** {modelo.capas}")
-        st.write(f"**Funciones de Activacion:** {modelo.activaciones}")
 
-    st.markdown('### Subir Imagen para Prediccion')
-    imagen_subida = st.file_uploader(
-        'Selecciona una imagen de un caracter:',
-        type=['png', 'jpg', 'jpeg', 'bmp'],
+def is_canvas_empty(canvas_data: np.ndarray) -> bool:
+    """
+    Check if canvas contains any drawing.
+    
+    Args:
+        canvas_data: RGBA image from canvas
+    
+    Returns:
+        True if canvas is empty, False otherwise
+    """
+    if canvas_data is None:
+        return True
+    
+    alpha_channel = canvas_data[:, :, 3]
+    drawn_pixels = np.sum(alpha_channel > 200)
+    
+    return drawn_pixels < 50
+
+
+def main():
+    st.title("Character Recognition System")
+    st.markdown("""
+    Draw a character in the canvas below and click **Predict** to recognize it.
+    
+    **Supported characters:** A-Z (uppercase), a-z (lowercase), 0-9, and symbols
+    """)
+    
+    model = load_model()
+    
+    st.markdown("### Draw Here")
+    
+    canvas_result = st_canvas(
+        fill_color="rgba(0, 0, 0, 0)",
+        stroke_width=20,
+        stroke_color="#FFFFFF",
+        background_color="#000000",
+        height=280,
+        width=280,
+        drawing_mode="freedraw",
+        key="canvas",
     )
-
-    if not imagen_subida:
-        return
-
-    try:
-        imagen_pil = Image.open(imagen_subida)
-    except (OSError, UnidentifiedImageError) as exc:
-        st.error(f'No se pudo abrir la imagen: {exc}')
-        return
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.image(imagen_pil, caption='Imagen Original', use_column_width=True)
-
-    entrada = preprocesar_imagen(imagen_pil)
+    
+    col1, col2, col3 = st.columns([1, 1, 1])
+    
     with col2:
-        st.image(entrada.reshape(28, 28), caption='Imagen Procesada (28x28)', use_column_width=True, clamp=True)
-
-    if st.button('Predecir', type='primary'):
-        probabilidades = _obtener_probabilidades(modelo, entrada)
-        indice_predicho = int(np.argmax(probabilidades))
-        confianza = float(probabilidades[0, indice_predicho])
-        etiqueta_predicha = DEFAULT_LABEL_MAP.get_label(indice_predicho)
-
-        st.metric(label='Caracter Predicho', value=f"'{etiqueta_predicha}'", delta=f'{confianza:.2%}')
+        predict_button = st.button("Predict", use_container_width=True, type="primary")
+    
+    if predict_button:
+        if canvas_result.image_data is None:
+            st.warning("Canvas is empty. Please draw a character first.")
+            return
         
-        st.markdown('#### Top 5 Predicciones')
-        _mostrar_top_predicciones(probabilidades)
+        if is_canvas_empty(canvas_result.image_data):
+            st.warning("No drawing detected. Please draw a character.")
+            return
+        
+        img_processed = preprocess_canvas(canvas_result.image_data)
+        
+        char, prob, top5 = model.predict(img_processed)
+        
+        st.markdown("---")
+        st.markdown("### Prediction Result")
+        
+        st.markdown(f"""
+        <div style='text-align: center; padding: 20px;'>
+            <h1 style='font-size: 80px; margin: 0;'>{char}</h1>
+            <p style='font-size: 24px; color: #666;'>{prob*100:.1f}% confidence</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        with st.expander("View Top 5 Predictions"):
+            for i, (label, confidence) in enumerate(top5, 1):
+                st.progress(confidence, text=f"{i}. **{label}** — {confidence*100:.1f}%")
+        
+        with st.expander("View Preprocessed Image"):
+            col_a, col_b, col_c = st.columns([1, 2, 1])
+            with col_b:
+                st.image(img_processed, width=140, caption="28×28 grayscale", use_container_width=False)
+            
+            st.markdown(f"""
+            **Image statistics:**
+            - Mean: {img_processed.mean():.3f}
+            - Std: {img_processed.std():.3f}
+            - Min: {img_processed.min():.3f}
+            - Max: {img_processed.max():.3f}
+            """)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

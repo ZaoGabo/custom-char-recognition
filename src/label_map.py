@@ -10,13 +10,14 @@ class LabelMap:
         Inicializar el mapeo de etiquetas.
         
         Args:
-            labels (list): Lista de etiquetas únicas
+            labels (list): Lista de etiquetas únicas (orden importa!)
         """
         if labels is None:
             # Etiquetas por defecto (A-Z)
             labels = [chr(i) for i in range(ord('A'), ord('Z') + 1)]
         
-        self.labels = sorted(labels)
+        # NO ordenar - mantener el orden original que coincide con el modelo
+        self.labels = list(labels)
         self.label_to_index = {label: idx for idx, label in enumerate(self.labels)}
         self.index_to_label = {idx: label for idx, label in enumerate(self.labels)}
         

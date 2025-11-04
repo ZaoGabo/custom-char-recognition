@@ -82,15 +82,39 @@ class DataLoader:
         return nombre_carpeta
 
     def _iterar_archivos(self) -> Iterator[Tuple[str, int]]:
-        for nombre_clase in sorted(os.listdir(self.ruta_datos)):
-            ruta_clase = os.path.join(self.ruta_datos, nombre_clase)
+        # Iterar en el ORDEN de las etiquetas del mapa, no alfabéticamente
+        # Crear mapeo de etiqueta → nombre de carpeta
+        mapeo_etiqueta_a_carpeta = {
+            # Mayúsculas A-Z
+            **{chr(i).upper(): f"{chr(i)}_upper" for i in range(ord('a'), ord('z') + 1)},
+            # Minúsculas a-z
+            **{chr(i).lower(): f"{chr(i)}_lower" for i in range(ord('a'), ord('z') + 1)},
+            # Dígitos 0-9
+            **{str(i): f"{i}_digit" for i in range(10)},
+            # Símbolos
+            '!': 'exclamation', '@': 'at', '#': 'hash', '$': 'dollar', '%': 'percent',
+            '&': 'ampersand', '*': 'asterisk', '(': 'lparen', ')': 'rparen',
+            '-': 'minus', '_': 'underscore', '+': 'plus', '=': 'equals',
+            '[': 'lbracket', ']': 'rbracket', '{': 'lbrace', '}': 'rbrace',
+            ';': 'semicolon', ':': 'colon', "'": 'quote', '"': 'dquote',
+            ',': 'comma', '.': 'period', '<': 'less', '>': 'greater',
+            '/': 'slash', '?': 'question', '|': 'pipe', '~': 'tilde',
+            '`': 'backtick', '¡': 'iexclamation', '¿': 'iquestion',
+        }
+        
+        # Iterar en el orden del label_map
+        for etiqueta in self.mapa_etiquetas.labels:
+            nombre_carpeta = mapeo_etiqueta_a_carpeta.get(etiqueta)
+            if nombre_carpeta is None:
+                continue
+                
+            ruta_clase = os.path.join(self.ruta_datos, nombre_carpeta)
             if not os.path.isdir(ruta_clase):
                 continue
 
-            etiqueta_real = self._mapear_carpeta_a_etiqueta(nombre_clase)
-            indice_clase = self.mapa_etiquetas.get_index(etiqueta_real)
+            indice_clase = self.mapa_etiquetas.get_index(etiqueta)
             if indice_clase == -1:
-                print(f"Advertencia: etiqueta '{etiqueta_real}' no encontrada.")
+                print(f"Advertencia: etiqueta '{etiqueta}' no encontrada en mapa.")
                 continue
 
             for archivo in sorted(os.listdir(ruta_clase)):

@@ -226,6 +226,12 @@ data/a_lower/*.jpg
 data/a_lower/*.jpeg
 data/a_lower/*.bmp
 data/b_lower/*.png
+# Dataset sintético generado desde canvas
+data/canvas_synthetic/X_canvas.npy
+data/canvas_synthetic/y_canvas.npy
+data/canvas_synthetic/stats.json
+data/canvas_synthetic/samples/
+
 data/b_lower/*.jpg
 data/b_lower/*.jpeg
 data/b_lower/*.bmp
@@ -393,6 +399,10 @@ debug_*.py
 recreate_model.py
 train_simple.py
 create_simple_model.py
+
+# Archivos obsoletos (movidos a carpeta obsoletos/)
+obsoletos/
+*.zip
 
 # Scripts de descarga de datasets (configuración local)
 src/scripts/descargar_kaggle_az.py
