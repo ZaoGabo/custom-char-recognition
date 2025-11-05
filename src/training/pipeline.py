@@ -6,18 +6,29 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+
+import importlib
+import math
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader as TorchDataLoader
-from torch.utils.data import TensorDataset
+from torch.utils.data import Dataset, TensorDataset
 
 from ..cnn_model_v2 import crear_modelo_cnn_v2
-from ..config import CUSTOM_LABELS, DATA_CONFIG, NETWORK_CONFIG, PATHS
+from ..config import (
+    ADVANCED_AUGMENTATION_CONFIG,
+    CUSTOM_LABELS,
+    DATA_CONFIG,
+    NETWORK_CONFIG,
+    PATHS,
+)
 from ..data_loader import DataLoader, _leer_imagen_gris
 from ..label_map import DEFAULT_LABEL_MAP, LabelMap
 from ..utils import normalize_image
+
+A = importlib.import_module("albumentations") if importlib.util.find_spec("albumentations") else None
 
 LOGGER = logging.getLogger(__name__)
 
@@ -113,6 +124,234 @@ def _crear_torch_dataloader(
     tensores_y = torch.from_numpy(etiquetas)
     dataset = TensorDataset(tensores_X, tensores_y)
     return TorchDataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+
+
+class _CharacterDataset(Dataset):
+    """Dataset de caracteres con augmentación opcional usando Albumentations."""
+
+    def __init__(
+        self,
+        rutas: Sequence[str],
+        etiquetas: Sequence[int],
+        tamano_imagen: Tuple[int, int],
+        transform: Optional[Any] = None,
+    ) -> None:
+        self.rutas = list(rutas)
+        self.etiquetas = list(etiquetas)
+        self.tamano_imagen = tamano_imagen
+        self.transform = transform
+
+    def __len__(self) -> int:  # pragma: no cover - comportamiento trivial
+        return len(self.rutas)
+
+    def __getitem__(self, idx: int):
+        ruta = self.rutas[idx]
+        imagen = _leer_imagen_gris(ruta, self.tamano_imagen).astype(np.uint8)
+
+        if self.transform is not None:
+            augmented = self.transform(image=imagen)
+            imagen = augmented["image"]
+
+        imagen = imagen.astype(np.float32) / 255.0
+        imagen = np.expand_dims(imagen, axis=0)
+
+        tensor_x = torch.from_numpy(imagen)
+        tensor_y = torch.tensor(self.etiquetas[idx], dtype=torch.int64)
+        return tensor_x, tensor_y
+
+
+def _build_advanced_augmentations(config: Dict[str, Any], tamano_imagen: Tuple[int, int]) -> Optional[Any]:
+    """Construir pipeline de augmentacion avanzada si esta habilitada."""
+    if not config.get("enable", False):
+        return None
+
+    global A
+    if A is None:
+        try:
+            A = importlib.import_module("albumentations")
+        except ImportError as exc:  # pragma: no cover - depende del entorno
+            LOGGER.warning(
+                "Albumentations no está disponible; se omite advanced_augmentation (%s)",
+                exc,
+            )
+            return None
+
+    alto, ancho = tamano_imagen
+    transforms: List[Any] = []
+
+    def _to_tuple(value: Any, cast, default: Tuple[Any, Any]) -> Tuple[Any, Any]:
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            return cast(value[0]), cast(value[1])
+        return default
+
+    def _symmetric_range(value: Any, default: Tuple[float, float]) -> Tuple[float, float]:
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            return float(value[0]), float(value[1])
+        if value is None:
+            return default
+        limit = float(value)
+        limit = abs(limit)
+        return -limit, limit
+
+    elastic_cfg = config.get("elastic_transform", {})
+    if elastic_cfg.get("p", 0) > 0:
+        transforms.append(
+            A.ElasticTransform(
+                alpha=float(elastic_cfg.get("alpha", 40.0)),
+                sigma=float(elastic_cfg.get("sigma", 6.0)),
+                p=float(elastic_cfg.get("p", 0.35)),
+                border_mode=0,
+                fill=elastic_cfg.get("fill", 0),
+            )
+        )
+
+    grid_cfg = config.get("grid_distortion", {})
+    if grid_cfg.get("p", 0) > 0:
+        transforms.append(
+            A.GridDistortion(
+                distort_limit=float(grid_cfg.get("distort_limit", 0.25)),
+                num_steps=int(grid_cfg.get("num_steps", 5)),
+                p=float(grid_cfg.get("p", 0.2)),
+                border_mode=0,
+                fill=grid_cfg.get("fill", 0),
+            )
+        )
+
+    affine_cfg = config.get("affine") or config.get("shift_scale_rotate", {})
+    if affine_cfg.get("p", 0) > 0:
+        translate_percent = affine_cfg.get("translate_percent")
+        if translate_percent is None:
+            translate_percent = affine_cfg.get("shift_limit")
+        translate_percent_tuple = None
+        if translate_percent is not None:
+            translate_percent_tuple = _symmetric_range(translate_percent, (-0.0625, 0.0625))
+        if isinstance(translate_percent_tuple, tuple):
+            translate_percent_tuple = (min(translate_percent_tuple), max(translate_percent_tuple))
+
+        scale_param = affine_cfg.get("scale")
+        if scale_param is None:
+            scale_limit = affine_cfg.get("scale_limit")
+            if scale_limit is not None:
+                low, high = _symmetric_range(scale_limit, (-0.1, 0.1))
+                scale_param = (1.0 + low, 1.0 + high)
+            else:
+                scale_param = (1.0, 1.0)
+        elif isinstance(scale_param, (int, float)):
+            scale_param = float(scale_param)
+        elif isinstance(scale_param, (list, tuple)) and len(scale_param) == 2:
+            scale_param = (float(scale_param[0]), float(scale_param[1]))
+        if isinstance(scale_param, tuple):
+            scale_param = (min(scale_param), max(scale_param))
+
+        rotate_param = affine_cfg.get("rotate")
+        if rotate_param is None:
+            rotate_limit = affine_cfg.get("rotate_limit", 0.0)
+            rotate_param = _symmetric_range(rotate_limit, (-45.0, 45.0))
+        elif isinstance(rotate_param, (int, float)):
+            rotate_param = float(rotate_param)
+        elif isinstance(rotate_param, (list, tuple)) and len(rotate_param) == 2:
+            rotate_param = (float(rotate_param[0]), float(rotate_param[1]))
+        if isinstance(rotate_param, tuple):
+            rotate_param = (min(rotate_param), max(rotate_param))
+
+        shear_param = affine_cfg.get("shear")
+        if shear_param is None:
+            shear_limit = affine_cfg.get("shear_limit")
+            if shear_limit is not None:
+                shear_param = _symmetric_range(shear_limit, (0.0, 0.0))
+            else:
+                shear_param = (0.0, 0.0)
+        elif isinstance(shear_param, (int, float)):
+            shear_param = float(shear_param)
+        elif isinstance(shear_param, (list, tuple)) and len(shear_param) == 2:
+            shear_param = (float(shear_param[0]), float(shear_param[1]))
+        if isinstance(shear_param, tuple):
+            shear_param = (min(shear_param), max(shear_param))
+
+        transforms.append(
+            A.Affine(
+                scale=scale_param,
+                translate_percent=translate_percent_tuple,
+                rotate=rotate_param,
+                shear=shear_param,
+                border_mode=0,
+                fill=affine_cfg.get("fill", 0),
+                p=float(affine_cfg.get("p", 0.5)),
+            )
+        )
+
+    brightness_cfg = config.get("random_brightness_contrast", {})
+    if brightness_cfg.get("p", 0) > 0:
+        transforms.append(
+            A.RandomBrightnessContrast(
+                brightness_limit=float(brightness_cfg.get("brightness_limit", 0.2)),
+                contrast_limit=float(brightness_cfg.get("contrast_limit", 0.2)),
+                p=float(brightness_cfg.get("p", 0.3)),
+            )
+        )
+
+    noise_cfg = config.get("gauss_noise", {})
+    if noise_cfg.get("p", 0) > 0:
+        std_range = noise_cfg.get("std_range")
+        if std_range is not None:
+            std_values = _to_tuple(std_range, float, (0.2, 0.44))
+            if any(v > 1 for v in std_values):
+                std_values = tuple(min(1.0, float(v) / 255.0) for v in std_values)
+        else:
+            var_limit = _to_tuple(noise_cfg.get("var_limit", (5.0, 25.0)), float, (5.0, 25.0))
+            std_values = tuple(min(1.0, math.sqrt(max(v, 0.0)) / 255.0) for v in var_limit)
+        std_values = tuple(sorted(std_values))
+        mean_range = noise_cfg.get("mean_range")
+        mean_values = _to_tuple(mean_range, float, (0.0, 0.0)) if mean_range is not None else (0.0, 0.0)
+        transforms.append(
+            A.GaussNoise(
+                std_range=std_values,
+                mean_range=mean_values,
+                per_channel=bool(noise_cfg.get("per_channel", True)),
+                noise_scale_factor=float(noise_cfg.get("noise_scale_factor", 1.0)),
+                p=float(noise_cfg.get("p", 0.25)),
+            )
+        )
+
+    dropout_cfg = config.get("coarse_dropout", {})
+    if dropout_cfg.get("p", 0) > 0:
+        num_holes_range = dropout_cfg.get("num_holes_range")
+        if num_holes_range is not None:
+            num_holes = _to_tuple(num_holes_range, int, (1, 1))
+        else:
+            min_holes = int(dropout_cfg.get("min_holes", 1))
+            max_holes = int(dropout_cfg.get("max_holes", max(1, min_holes)))
+            num_holes = (min_holes, max(max_holes, min_holes))
+
+        height_range_cfg = dropout_cfg.get("hole_height_range")
+        if height_range_cfg is not None:
+            hole_height_range = _to_tuple(height_range_cfg, int, (1, 1))
+        else:
+            min_height = int(dropout_cfg.get("min_height", 1))
+            max_height = int(dropout_cfg.get("max_height", max(1, min_height)))
+            hole_height_range = (min_height, max(max_height, min_height))
+
+        width_range_cfg = dropout_cfg.get("hole_width_range")
+        if width_range_cfg is not None:
+            hole_width_range = _to_tuple(width_range_cfg, int, (1, 1))
+        else:
+            min_width = int(dropout_cfg.get("min_width", 1))
+            max_width = int(dropout_cfg.get("max_width", max(1, min_width)))
+            hole_width_range = (min_width, max(max_width, min_width))
+
+        transforms.append(
+            A.CoarseDropout(
+                num_holes_range=num_holes,
+                hole_height_range=hole_height_range,
+                hole_width_range=hole_width_range,
+                fill=dropout_cfg.get("fill", 0),
+                p=float(dropout_cfg.get("p", 0.15)),
+            )
+        )
+
+    transforms.append(A.PadIfNeeded(min_height=alto, min_width=ancho, border_mode=0, fill=0))
+
+    return A.Compose(transforms)
 
 
 def _has_image_files(path: Path) -> bool:
@@ -288,17 +527,36 @@ def entrenar_modelo(
         raise RuntimeError(f"No se encontraron muestras en {data_dir_path}")
 
     tamano_imagen = DATA_CONFIG.get("tamano_imagen", (28, 28))
-    X_train, y_train = _cargar_dataset(train_rutas, train_labels, tamano_imagen)
-    X_val: Optional[np.ndarray]
-    y_val: Optional[np.ndarray]
-    if val_rutas:
-        X_val, y_val = _cargar_dataset(val_rutas, val_labels, tamano_imagen)
-    else:
-        X_val, y_val = None, None
+
+    advanced_transform = _build_advanced_augmentations(ADVANCED_AUGMENTATION_CONFIG, tamano_imagen)
+    usar_augmentacion_avanzada = advanced_transform is not None
 
     batch_size = int(NETWORK_CONFIG.get("tamano_lote", 32))
-    train_loader = _crear_torch_dataloader(X_train, y_train, batch_size, shuffle=True)
-    val_loader = _crear_torch_dataloader(X_val, y_val, batch_size, shuffle=False) if X_val is not None and y_val is not None else None
+
+    if usar_augmentacion_avanzada:
+        train_dataset = _CharacterDataset(train_rutas, train_labels, tamano_imagen, transform=advanced_transform)
+        val_dataset = _CharacterDataset(val_rutas, val_labels, tamano_imagen) if val_rutas else None
+        train_loader = TorchDataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = (
+            TorchDataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+            if val_dataset is not None
+            else None
+        )
+    else:
+        X_train, y_train = _cargar_dataset(train_rutas, train_labels, tamano_imagen)
+        X_val: Optional[np.ndarray]
+        y_val: Optional[np.ndarray]
+        if val_rutas:
+            X_val, y_val = _cargar_dataset(val_rutas, val_labels, tamano_imagen)
+        else:
+            X_val, y_val = None, None
+
+        train_loader = _crear_torch_dataloader(X_train, y_train, batch_size, shuffle=True)
+        val_loader = (
+            _crear_torch_dataloader(X_val, y_val, batch_size, shuffle=False)
+            if X_val is not None and y_val is not None
+            else None
+        )
 
     device_obj = _select_device(device)
     model = crear_modelo_cnn_v2(

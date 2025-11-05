@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections import Counter
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple, Iterator
 
@@ -143,13 +144,33 @@ class DataLoader:
         if train_test_split is None:
             raise ImportError("scikit-learn no está instalado.")
         
-        X_train, X_val, y_train, y_val = train_test_split(
-            self.rutas_imagenes,
-            self.etiquetas,
-            train_size=proporcion_entrenamiento,
-            random_state=semilla,
-            stratify=self.etiquetas,
-        )
+        if not self.rutas_imagenes:
+            return [], [], [], []
+
+        conteo_clases = Counter(self.etiquetas)
+        min_por_clase = min(conteo_clases.values()) if conteo_clases else 0
+        necesita_fallback = min_por_clase < 2 or len(conteo_clases) < 2
+
+        if necesita_fallback:
+            # Cuando alguna clase tiene menos de 2 muestras no podemos usar stratify.
+            if proporcion_entrenamiento >= 1.0 or len(self.rutas_imagenes) < 2:
+                return list(self.rutas_imagenes), [], list(self.etiquetas), []
+
+            X_train, X_val, y_train, y_val = train_test_split(
+                self.rutas_imagenes,
+                self.etiquetas,
+                train_size=proporcion_entrenamiento,
+                random_state=semilla,
+                stratify=None,
+            )
+        else:
+            X_train, X_val, y_train, y_val = train_test_split(
+                self.rutas_imagenes,
+                self.etiquetas,
+                train_size=proporcion_entrenamiento,
+                random_state=semilla,
+                stratify=self.etiquetas,
+            )
         return X_train, X_val, y_train, y_val
 
     def generar_lotes(

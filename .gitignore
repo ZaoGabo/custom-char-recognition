@@ -39,6 +39,7 @@ env/
 .env
 venv.bak/
 env.bak/
+.venv_py314/
 
 # IDEs y Editores
 .vscode/

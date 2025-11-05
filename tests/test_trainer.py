@@ -3,14 +3,6 @@ from unittest.mock import ANY, MagicMock, patch
 import numpy as np
 import pytest
 
-import pickle
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import numpy as np
-import pytest
-
-from src.network import NeuralNetwork
 from src.training.pipeline import _one_hot, entrenar_modelo, _actualizar_tasa_aprendizaje
 
 
@@ -51,7 +43,9 @@ def test_actualizar_tasa_aprendizaje_step_decay(epoca, lr_esperada):
 @patch('src.training.pipeline._cargar_dataset')
 @patch('src.training.pipeline.DataLoader')
 @patch('src.training.pipeline.crear_modelo_cnn_v2')
+@patch('src.training.pipeline._build_advanced_augmentations', return_value=None)
 def test_entrenar_modelo_flujo_completo(
+    mock_build_aug,
     mock_crear_modelo,
     mock_dataloader,
     mock_cargar_dataset,
@@ -95,6 +89,7 @@ def test_entrenar_modelo_flujo_completo(
             data_dir='ruta/ficticia',
         )
 
+    mock_build_aug.assert_called_once()
     mock_dataloader.assert_called_once()
     dataloader_instance.cargar_desde_directorio.assert_called_once()
     dataloader_instance.dividir_datos.assert_called_once()

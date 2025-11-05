@@ -42,6 +42,42 @@ augmentation_config:
   radio_blur: 1.0  # Blur más fuerte (antes 0.5) - simula trazos imperfectos
   nivel_ruido: 0.05  # Más ruido (antes 0.03) - simula variaciones de dibujo
 
+# Configuracion de augmentacion avanzada con Albumentations
+advanced_augmentation:
+  enable: true
+  elastic_transform:
+    alpha: 40.0
+    sigma: 6.0
+    p: 0.35
+    fill: 0
+  grid_distortion:
+    distort_limit: 0.25
+    num_steps: 5
+    p: 0.2
+    fill: 0
+  affine:
+    translate_percent: 0.08
+    scale_limit: 0.15
+    rotate_limit: 15
+    shear_limit: 0
+    p: 0.5
+    fill: 0
+  random_brightness_contrast:
+    brightness_limit: 0.2
+    contrast_limit: 0.2
+    p: 0.3
+  gauss_noise:
+    std_range: [2.3, 5.0]
+    mean_range: [0.0, 0.0]
+    per_channel: true
+    p: 0.25
+  coarse_dropout:
+    num_holes_range: [1, 1]
+    hole_height_range: [1, 6]
+    hole_width_range: [1, 6]
+    fill: 0
+    p: 0.15
+
 # Rutas del proyecto
 paths:
   datos_crudos: 'data/raw'
