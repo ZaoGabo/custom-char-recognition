@@ -1,47 +1,61 @@
-import json
 import os
+
 import pytest
 
-from src.label_map import LabelMap
+from src.config import CUSTOM_LABELS
+from src.label_map import DEFAULT_LABEL_MAP, LabelMap
+
+# pylint: disable=redefined-outer-name
 
 
 @pytest.fixture
-def mapa_etiquetas():
+def label_map_fixture():
     """Fixture para crear un LabelMap de prueba."""
     return LabelMap(['B', 'A', 'C'])
 
 
-def test_label_map_inicializacion(mapa_etiquetas):
-    """Verificar que las etiquetas se ordenen y los mapeos se creen."""
-    assert mapa_etiquetas.labels == ['A', 'B', 'C']
-    assert mapa_etiquetas.label_to_index == {'A': 0, 'B': 1, 'C': 2}
-    assert mapa_etiquetas.index_to_label == {0: 'A', 1: 'B', 2: 'C'}
+def test_label_map_inicializacion(label_map_fixture):
+    """Verificar que se preserve el orden provisto."""
+    assert label_map_fixture.labels == ['B', 'A', 'C']
+    assert label_map_fixture.label_to_index == {'B': 0, 'A': 1, 'C': 2}
+    assert label_map_fixture.index_to_label == {0: 'B', 1: 'A', 2: 'C'}
 
 
-def test_get_index(mapa_etiquetas):
+def test_get_index(label_map_fixture):
     """Verificar la obtencion de indices."""
-    assert mapa_etiquetas.get_index('B') == 1
-    assert mapa_etiquetas.get_index('D') == -1
+    assert label_map_fixture.get_index('B') == 0
+    assert label_map_fixture.get_index('D') == -1
 
 
-def test_get_label(mapa_etiquetas):
+def test_get_label(label_map_fixture):
     """Verificar la obtencion de etiquetas."""
-    assert mapa_etiquetas.get_label(2) == 'C'
-    assert mapa_etiquetas.get_label(3) == "Unknown"
+    assert label_map_fixture.get_label(2) == 'C'
+    assert label_map_fixture.get_label(3) == "Unknown"
 
 
-def test_get_num_classes(mapa_etiquetas):
+def test_get_num_classes(label_map_fixture):
     """Verificar que el numero de clases sea correcto."""
-    assert mapa_etiquetas.get_num_classes() == 3
+    assert label_map_fixture.get_num_classes() == 3
 
 
-def test_save_and_load(mapa_etiquetas, tmp_path):
+def test_save_and_load(label_map_fixture, tmp_path):
     """Verificar guardado y carga desde JSON."""
     ruta_archivo = os.path.join(tmp_path, "label_map.json")
-    mapa_etiquetas.save(ruta_archivo)
+    label_map_fixture.save(ruta_archivo)
 
     assert os.path.exists(ruta_archivo)
 
     mapa_cargado = LabelMap.load(ruta_archivo)
-    assert mapa_cargado.labels == mapa_etiquetas.labels
-    assert mapa_cargado.label_to_index == mapa_etiquetas.label_to_index
+    assert mapa_cargado.labels == label_map_fixture.labels
+    assert mapa_cargado.label_to_index == label_map_fixture.label_to_index
+
+
+def test_label_map_preserva_orden_personalizado():
+    etiquetas = ['Z', 'Y', 'X']
+    mapa = LabelMap(etiquetas)
+    assert mapa.labels == etiquetas
+    assert mapa.label_to_index == {'Z': 0, 'Y': 1, 'X': 2}
+
+
+def test_label_map_por_defecto_coincide_con_config():
+    assert DEFAULT_LABEL_MAP.labels == CUSTOM_LABELS

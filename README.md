@@ -98,20 +98,30 @@ Arquitectura más simple disponible en `src/network.py`:
 
 ## Entrenamiento
 
-### Fine-tuning del modelo CNN
-
-El modelo base fue entrenado en EMNIST Extended y posteriormente fine-tuned con datos de canvas:
+### Entrenamiento principal (CNN v2)
 
 ```bash
-python entrenar_finetune_robusto.py
+python -m src.training.pipeline --force --verbose
 ```
 
-**Configuración de fine-tuning**:
-- Epochs: 30
-- Batch size: 64
-- Learning rate: 0.0001
-- Canvas weight: 30%
-- Early stopping: patience 10
+El pipeline entrena la CNN v2 sobre los datos procesados definidos en `config.yml`,
+genera un historial por época y guarda los pesos en `models/<model_dir_name>/`.
+Usa CUDA o MPS automáticamente si están disponibles; con `--device cpu` se fuerza CPU.
+
+### Fine-tuning del modelo CNN
+
+El script robusto reutiliza el mismo pipeline para volver a entrenar o ajustar el modelo final
+con reintentos automaticos y seleccion de dispositivo:
+
+```bash
+python entrenar_finetune_robusto.py --verbose
+```
+
+Parametros utiles:
+- `--data-dir`: ruta alternativa de datos procesados para fine-tuning
+- `--epochs`: número de épocas (si no, usa `config.yml`)
+- `--device`: `cpu`, `cuda` o `mps`
+- `--no-force`: evita sobreescribir el modelo existente en `models/<model_dir_name>/`
 
 ### Generar datos sintéticos de canvas
 
@@ -120,6 +130,16 @@ python src/generar_dataset_canvas.py
 ```
 
 Genera 9,400 imágenes sintéticas simulando trazos de canvas (100 por clase).
+
+### Descargar EMNIST desde la línea de comandos
+
+```bash
+python src/scripts/descargar_emnist.py --split byclass --max-per-class 500
+```
+
+Descarga el split indicado y exporta las imágenes como PNG dentro de `data/raw/`, usando
+la misma estructura de carpetas que espera el pipeline (`A_upper`, `a_lower`, `0_digit`, etc.).
+Puedes ajustar `--output-dir`, `--max-per-class` o `--skip-existing` según el entorno local.
 
 
 ## Resultados

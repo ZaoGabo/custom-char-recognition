@@ -27,7 +27,7 @@ def cargar_modelo_entrenado():
 
     if not arquitectura_path.exists():
         st.error('❌ No se encontró el modelo entrenado.')
-        st.info('📝 Ejecuta primero: `python -m src.trainer --force --verbose`')
+        st.info('📝 Ejecuta primero: `python -m src.training.pipeline --force --verbose`')
         return None
 
     try:

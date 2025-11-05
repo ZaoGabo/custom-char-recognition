@@ -1,41 +1,9 @@
-import pickle
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, MagicMock, patch
 
 import numpy as np
 import pytest
 
-from src.network import NeuralNetwork
-from src.trainer import _one_hot, entrenar_modelo, _actualizar_tasa_aprendizaje
-
-
-@pytest.fixture
-def mock_data():
-    """Fixture para datos de entrenamiento / validacion / prueba simulados."""
-    X_train = np.random.rand(10, 4)
-    y_train = np.array([0, 1] * 5)
-    X_val = np.random.rand(4, 4)
-    y_val = np.array([0, 1, 0, 1])
-    X_test = np.random.rand(4, 4)
-    y_test = np.array([1, 0, 1, 0])
-    return X_train, X_val, X_test, y_train, y_val, y_test
-
-
-@pytest.fixture
-def mock_network():
-    """Fixture para una red neuronal simulada."""
-    net = MagicMock(spec=NeuralNetwork)
-
-    def predict_probs_dynamic(X):
-        num_muestras = X.shape[0]
-        num_clases = 2
-        probs = np.random.rand(num_muestras, num_clases)
-        return probs / probs.sum(axis=1, keepdims=True)
-
-    net.predecir_probabilidades.side_effect = predict_probs_dynamic
-    net.calcular_perdida.return_value = 0.5
-    net.predecir.side_effect = lambda X: np.argmax(predict_probs_dynamic(X), axis=1)
-    return net
+from src.training.pipeline import _one_hot, _actualizar_tasa_aprendizaje, entrenar_modelo
 
 
 def test_one_hot_encoding():
@@ -57,45 +25,82 @@ def test_one_hot_encoding():
         (100, 0.00001),
     ],
 )
-@patch('src.trainer.NETWORK_CONFIG')
-def test_actualizar_tasa_aprendizaje_step_decay(mock_network_config, epoca, lr_esperada):
+def test_actualizar_tasa_aprendizaje_step_decay(epoca, lr_esperada):
     """Verificar que la tasa de aprendizaje se actualice correctamente."""
-    mock_network_config.get.side_effect = lambda key, default=None: {
-        'tasa_aprendizaje': 0.001,
-        'lr_scheduler_config': {
-            'tipo': 'step_decay',
-            'tasa_decaimento': 0.1,
-            'epocas_decaimento': 50,
-        },
-    }.get(key, default)
+    scheduler_config = {
+        'tipo': 'step_decay',
+        'tasa_decaimento': 0.1,
+        'epocas_decaimento': 50,
+    }
 
-    lr_calculada = _actualizar_tasa_aprendizaje(epoca)
+    lr_calculada = _actualizar_tasa_aprendizaje(epoca, base_lr=0.001, scheduler_config=scheduler_config)
     assert lr_calculada == pytest.approx(lr_esperada)
 
 
-@patch('src.trainer.DataLoader')
-@patch('src.trainer._construir_modelo')
-@patch('src.trainer.Path.exists')
-@patch('src.trainer._actualizar_tasa_aprendizaje')
+@patch('src.training.pipeline._guardar_modelo')
+@patch('src.training.pipeline._train_loop')
+@patch('src.training.pipeline._crear_torch_dataloader')
+@patch('src.training.pipeline._cargar_dataset')
+@patch('src.training.pipeline.DataLoader')
+@patch('src.training.pipeline.crear_modelo_cnn_v2')
 def test_entrenar_modelo_flujo_completo(
-    mock_actualizar_lr, mock_exists, mock_construir, mock_dataloader, mock_data
+    mock_crear_modelo,
+    mock_dataloader,
+    mock_cargar_dataset,
+    mock_crear_dl,
+    mock_train_loop,
+    mock_guardar_modelo,
+    tmp_path,
 ):
-    # Configurar mocks
-    mock_dataloader_instance = mock_dataloader.return_value
-    mock_dataloader_instance.dividir_datos.return_value = (['train_path'], ['val_path'], [0], [1])
-    
-    mock_modelo_instance = MagicMock(spec=NeuralNetwork)
-    mock_modelo_instance.capas = [784, 128, 52]  # Simular capas
-    mock_construir.return_value = mock_modelo_instance
-    
-    mock_exists.return_value = False
+    mock_guardar_modelo.return_value = tmp_path / 'checkpoint.pt'
 
-    with patch('src.trainer.next') as mock_next:
-        mock_next.return_value = (np.random.rand(10, 784), np.array([0]*10))
-        entrenar_modelo(force=True, verbose=False)
+    model_mock = MagicMock()
+    model_mock.to.return_value = model_mock
+    mock_crear_modelo.return_value = model_mock
 
-    # Verificar llamadas clave
-    mock_dataloader_instance.cargar_desde_directorio.assert_called_once()
-    mock_dataloader_instance.dividir_datos.assert_called_once()
-    mock_construir.assert_called_once()
-    assert mock_modelo_instance.guardar_modelo.call_count >= 1
+    dataloader_instance = mock_dataloader.return_value
+    dataloader_instance.cargar_desde_directorio.return_value = None
+    dataloader_instance.dividir_datos.return_value = (
+        ['train/img_1.png', 'train/img_2.png'],
+        ['val/img_1.png'],
+        [0, 1],
+        [0],
+    )
+
+    mock_cargar_dataset.side_effect = [
+        (np.random.rand(2, 1, 28, 28).astype(np.float32), np.array([0, 1], dtype=np.int64)),
+        (np.random.rand(1, 1, 28, 28).astype(np.float32), np.array([0], dtype=np.int64)),
+    ]
+
+    train_loader_mock = MagicMock()
+    val_loader_mock = MagicMock()
+    mock_crear_dl.side_effect = [train_loader_mock, val_loader_mock]
+
+    mock_train_loop.return_value = [{'epoch': 1, 'loss_train': 0.5}]
+
+    with patch.dict('src.training.pipeline.PATHS', {'modelos': str(tmp_path)}, clear=False):
+        output_dir = entrenar_modelo(
+            force=True,
+            verbose=False,
+            max_epochs=1,
+            model_dir_name='modelo_prueba',
+            data_dir='ruta/ficticia',
+        )
+
+    mock_dataloader.assert_called_once()
+    dataloader_instance.cargar_desde_directorio.assert_called_once()
+    dataloader_instance.dividir_datos.assert_called_once()
+    assert mock_cargar_dataset.call_count == 2
+    assert mock_crear_dl.call_count == 2
+    mock_train_loop.assert_called_once_with(
+        model=model_mock,
+        train_loader=train_loader_mock,
+        val_loader=val_loader_mock,
+        device=ANY,
+        epocas=1,
+        base_lr=ANY,
+        scheduler_config=ANY,
+        verbose=False,
+    )
+    mock_guardar_modelo.assert_called_once()
+    assert output_dir == tmp_path / 'modelo_prueba'

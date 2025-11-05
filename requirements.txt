@@ -8,6 +8,7 @@ scipy>=1.7.0
 matplotlib>=3.5.0
 scikit-learn>=1.0.0
 torch>=2.0.0
+torchvision>=0.15.0
 
 # Image processing
 opencv-python>=4.5.0
