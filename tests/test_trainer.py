@@ -3,7 +3,15 @@ from unittest.mock import ANY, MagicMock, patch
 import numpy as np
 import pytest
 
-from src.training.pipeline import _one_hot, _actualizar_tasa_aprendizaje, entrenar_modelo
+import pickle
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+
+from src.network import NeuralNetwork
+from src.training.pipeline import _one_hot, entrenar_modelo, _actualizar_tasa_aprendizaje
 
 
 def test_one_hot_encoding():
