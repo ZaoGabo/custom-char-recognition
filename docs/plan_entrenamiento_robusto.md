@@ -81,6 +81,10 @@ Construir un pipeline de entrenamiento altamente robusto (basado en `RobustTrain
 - ✅ Simulación `KeyboardInterrupt` (Día 6): reintento automático completó el entrenamiento tras la interrupción manual.
 - ✅ Simulación OOM (Día 6): `torch.cuda.OutOfMemoryError` forzada en GPU; el reintento completó el entrenamiento.
 - ✅ OOM real reproducido (Día 6): `scripts/oom_recovery_demo.py` provoca un OOM genuino en el primer intento (patch de `_run_epoch` + `resume=False`), y el reintento automático completa la época.
+- ✅ 09/11/2025: Se restaura `scripts/oom_recovery_demo.py` tras la limpieza; validado con `python scripts/oom_recovery_demo.py --epochs 1 --batch-size 512 --verbose` (primer intento OOM, segundo intento completado).
+- ✅ 09/11/2025: Corrida de control con `entrenar_finetune_robusto.py --device cuda --epochs 2 --patience 2 --max-checkpoints 3 --verbose`.
+  - Reanuda desde checkpoints previos, ejecuta 2 épocas adicionales (historia total 3).
+  - `acc_val` final: 0.7211; artefactos en `models/cnn_modelo_v2_finetuned/`.
 - ✅ Entrenamiento en GPU (Día 6): corrida de 3 épocas con `--device cuda`, mejor `acc_val`=0.7211 y artefactos actualizados.
 
 ## Fase 2 (Semana 2): BalancedAugmentation & Canvas Pipeline

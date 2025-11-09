@@ -1,4 +1,4 @@
-"""Script para demostrar la recuperación ante OOM real con RobustTrainer."""
+"""Demo para validar la recuperación ante OOM con RobustTrainer."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from src.training.robust_trainer import RobustTrainer, RobustTrainerConfig, Trai
 
 
 def _patch_trainer_for_oom() -> None:
-    """Parchea ``RobustTrainer`` para forzar un OOM solo en el primer epoch."""
+    """Parchea ``RobustTrainer`` para forzar un OOM en la primera época."""
 
     original_run_epoch = RobustTrainer._run_epoch
     state = {"oom_triggered": False}
@@ -53,11 +53,13 @@ def _patch_trainer_for_oom() -> None:
         if not state["oom_triggered"]:
             state["oom_triggered"] = True
             if verbose:
-                print("[OOM demo] Forzando OOM en GPU en la primera epoca...")
+                print("[OOM demo] Forzando OOM en GPU en la primera época...")
             buffers = []
             try:
                 while True:
-                    buffers.append(torch.empty((256, 1024, 1024), dtype=torch.float32, device=device))
+                    buffers.append(
+                        torch.empty((256, 1024, 1024), dtype=torch.float32, device=device)
+                    )
             except torch.cuda.OutOfMemoryError:
                 if verbose:
                     print("[OOM demo] OOM capturado, propagando...")
@@ -89,6 +91,9 @@ def _patch_trainer_for_oom() -> None:
 
 
 def run_demo(args: argparse.Namespace) -> None:
+    if not torch.cuda.is_available():
+        raise RuntimeError("Se requiere una GPU CUDA para la demo de OOM.")
+
     _patch_trainer_for_oom()
 
     config = RobustTrainerConfig(
@@ -118,12 +123,38 @@ def run_demo(args: argparse.Namespace) -> None:
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Demo de recuperación ante OOM real con RobustTrainer")
-    parser.add_argument("--epochs", type=int, default=1, help="Número de épocas a ejecutar tras el OOM")
-    parser.add_argument("--batch-size", type=int, default=512, help="Batch size para la corrida de demostración")
-    parser.add_argument("--data-dir", type=str, default=None, help="Ruta de datos procesados (usa config.yml por defecto)")
-    parser.add_argument("--model-dir-name", type=str, default="cnn_modelo_v2_oom_demo", help="Carpeta de modelos para la demo")
-    parser.add_argument("--verbose", action="store_true", help="Mostrar métricas por época")
+    parser = argparse.ArgumentParser(
+        description="Demo de recuperación ante un OOM real usando RobustTrainer",
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=1,
+        help="Número de épocas a ejecutar después del OOM",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=512,
+        help="Tamaño de batch para la corrida de demostración",
+    )
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        default=None,
+        help="Ruta de datos procesados (usa config.yml por defecto)",
+    )
+    parser.add_argument(
+        "--model-dir-name",
+        type=str,
+        default="cnn_modelo_v2_oom_demo",
+        help="Carpeta de modelos para la demo",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Mostrar métricas por época",
+    )
     return parser.parse_args(argv)
 
 

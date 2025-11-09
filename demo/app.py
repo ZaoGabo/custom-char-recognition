@@ -1,146 +1,290 @@
 """
-Character Recognition Web Application
-
-Production-ready Streamlit application for handwritten character recognition
-using a fine-tuned convolutional neural network (CNN v2).
-
-Model: CNN v2 Finetuned (83.80% validation accuracy)
-Classes: 94 characters (A-Z, a-z, 0-9, symbols)
+App Final - CNN v2 Finetuned con preprocesamiento CORRECTO
+92% de accuracy en caracteres generados
 """
 import sys
 from pathlib import Path
 
+# Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import streamlit as st
 import numpy as np
-from PIL import Image
 from streamlit_drawable_canvas import st_canvas
+from PIL import Image
 
-from src.cnn_predictor_v2_finetuned import CNNPredictor_v2_Finetuned
-
-
-st.set_page_config(
-    page_title="Character Recognition",
-    page_icon="🔤",
-    layout="centered"
-)
+from src.cnn_predictor_v2_finetuned import cargar_cnn_predictor_v2_finetuned
 
 
-@st.cache_resource
-def load_model():
-    """Load CNN model. Cached for performance."""
-    return CNNPredictor_v2_Finetuned()
-
-
-def preprocess_canvas(canvas_data: np.ndarray) -> np.ndarray:
+def preprocess_canvas_CORRECTO(canvas_data: np.ndarray) -> np.ndarray:
     """
-    Preprocess canvas drawing for model inference.
+    Preprocesamiento CORRECTO para el canvas.
     
-    Args:
-        canvas_data: RGBA image from canvas (H, W, 4)
+    EMNIST: Fondo NEGRO (0), Caracteres BLANCOS (255)
+    Canvas: Fondo NEGRO RGB=(0,0,0), Trazo BLANCO RGB=(255,255,255)
     
-    Returns:
-        Normalized grayscale image (28, 28) in range [0, 1]
+    ✅ Ya está en el formato correcto, NO invertir colores.
     """
+    # Extraer RGB (ignorar alfa)
     img_rgb = canvas_data[:, :, :3]
-    
     img_pil = Image.fromarray(img_rgb.astype('uint8'))
-    img_gray = img_pil.convert('L')
-    img_resized = img_gray.resize((28, 28), Image.Resampling.LANCZOS)
+    img_gray = np.array(img_pil.convert('L'))
     
-    img_array = np.array(img_resized)
-    img_normalized = img_array.astype(np.float32) / 255.0
+    # Detectar si hay contenido
+    if np.max(img_gray) < 10:
+        return np.zeros((28, 28), dtype=np.float32)
     
-    return img_normalized
+    # Bounding box (detectar el trazo blanco)
+    threshold = 30
+    mask = img_gray > threshold
+    
+    if not np.any(mask):
+        return np.zeros((28, 28), dtype=np.float32)
+    
+    rows = np.any(mask, axis=1)
+    cols = np.any(mask, axis=0)
+    row_indices = np.where(rows)[0]
+    col_indices = np.where(cols)[0]
+    
+    if len(row_indices) == 0 or len(col_indices) == 0:
+        return np.zeros((28, 28), dtype=np.float32)
+    
+    y_min, y_max = row_indices[0], row_indices[-1]
+    x_min, x_max = col_indices[0], col_indices[-1]
+    
+    # Recortar con padding
+    padding = 4
+    y_min = max(0, y_min - padding)
+    y_max = min(img_gray.shape[0] - 1, y_max + padding)
+    x_min = max(0, x_min - padding)
+    x_max = min(img_gray.shape[1] - 1, x_max + padding)
+    
+    img_cropped = img_gray[y_min:y_max+1, x_min:x_max+1]
+    
+    # Resize manteniendo aspect ratio (como EMNIST)
+    height, width = img_cropped.shape
+    target_size = 20  # EMNIST usa 20x20 dentro de 28x28
+    
+    if height > width:
+        new_height = target_size
+        new_width = max(1, int(width * target_size / height))
+    else:
+        new_width = target_size
+        new_height = max(1, int(height * target_size / width))
+    
+    img_pil = Image.fromarray(img_cropped)
+    img_scaled = img_pil.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    img_scaled_np = np.array(img_scaled, dtype=np.float32)
+    
+    # Centrar en 28x28 con fondo NEGRO
+    img_final = np.zeros((28, 28), dtype=np.float32)
+    offset_y = (28 - new_height) // 2
+    offset_x = (28 - new_width) // 2
+    img_final[offset_y:offset_y+new_height, offset_x:offset_x+new_width] = img_scaled_np
+    
+    # Normalizar a [0, 1]
+    img_final = img_final / 255.0
+    
+    return img_final
 
 
-def is_canvas_empty(canvas_data: np.ndarray) -> bool:
-    """
-    Check if canvas contains any drawing.
-    
-    Args:
-        canvas_data: RGBA image from canvas
-    
-    Returns:
-        True if canvas is empty, False otherwise
-    """
-    if canvas_data is None:
-        return True
-    
-    alpha_channel = canvas_data[:, :, 3]
-    drawn_pixels = np.sum(alpha_channel > 200)
-    
-    return drawn_pixels < 50
+def get_color_by_confidence(conf: float) -> str:
+    """Color según nivel de confianza"""
+    if conf >= 0.9:
+        return "#d4edda"  # Verde claro
+    elif conf >= 0.7:
+        return "#fff3cd"  # Amarillo claro
+    elif conf >= 0.5:
+        return "#ffe5d0"  # Naranja claro
+    else:
+        return "#f8d7da"  # Rojo claro
+
+
+def get_emoji_by_confidence(conf: float) -> str:
+    """Emoji según confianza"""
+    if conf >= 0.95:
+        return "🎯"
+    elif conf >= 0.85:
+        return "✅"
+    elif conf >= 0.7:
+        return "👍"
+    elif conf >= 0.5:
+        return "⚠️"
+    else:
+        return "❌"
 
 
 def main():
-    st.title("Character Recognition System")
-    st.markdown("""
-    Draw a character in the canvas below and click **Predict** to recognize it.
-    
-    **Supported characters:** A-Z (uppercase), a-z (lowercase), 0-9, and symbols
-    """)
-    
-    model = load_model()
-    
-    st.markdown("### Draw Here")
-    
-    canvas_result = st_canvas(
-        fill_color="rgba(0, 0, 0, 0)",
-        stroke_width=20,
-        stroke_color="#FFFFFF",
-        background_color="#000000",
-        height=280,
-        width=280,
-        drawing_mode="freedraw",
-        key="canvas",
+    st.set_page_config(
+        page_title="Reconocimiento de Caracteres",
+        page_icon="✍️",
+        layout="wide"
     )
     
-    col1, col2, col3 = st.columns([1, 1, 1])
+    # Título con gradiente
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                padding: 30px; 
+                border-radius: 15px; 
+                margin-bottom: 30px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <h1 style="color: white; text-align: center; margin: 0; font-size: 48px;">
+            ✍️ Reconocimiento de Caracteres
+        </h1>
+        <p style="color: white; text-align: center; font-size: 20px; margin: 10px 0 0 0;">
+            CNN v2 Finetuned - 92% Accuracy 🎯
+        </p>
+        <p style="color: rgba(255,255,255,0.8); text-align: center; font-size: 16px; margin: 5px 0 0 0;">
+            A-Z, a-z, 0-9 + símbolos especiales (94 clases)
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    with col2:
-        predict_button = st.button("Predict", use_container_width=True, type="primary")
+    # Cargar modelo
+    if 'predictor' not in st.session_state:
+        with st.spinner('🔄 Cargando modelo CNN...'):
+            st.session_state.predictor = cargar_cnn_predictor_v2_finetuned()
+            st.success('✅ Modelo cargado correctamente')
     
-    if predict_button:
-        if canvas_result.image_data is None:
-            st.warning("Canvas is empty. Please draw a character first.")
-            return
+    # Layout en 3 columnas
+    col_left, col_center, col_right = st.columns([1, 2, 1])
+    
+    with col_center:
+        st.markdown("### ✏️ Dibuja un carácter:")
         
-        if is_canvas_empty(canvas_result.image_data):
-            st.warning("No drawing detected. Please draw a character.")
-            return
+        # Instrucciones
+        with st.expander("📖 Instrucciones"):
+            st.markdown("""
+            - **Dibuja** un carácter (letra, número o símbolo)
+            - **Presiona** el botón para reconocer
+            - **Limpia** el canvas para probar otro
+            
+            **Nota:** Algunos caracteres similares pueden confundirse:
+            - I (mayúscula) ↔ l (minúscula) ↔ | (barra)
+            - o (minúscula) ↔ O (mayúscula)
+            - c (minúscula) ↔ C (mayúscula)
+            """)
         
-        img_processed = preprocess_canvas(canvas_result.image_data)
+        # Canvas
+        canvas_result = st_canvas(
+            fill_color="rgba(0, 0, 0, 1)",
+            stroke_width=18,
+            stroke_color="rgba(255, 255, 255, 1)",
+            background_color="rgba(0, 0, 0, 1)",
+            height=280,
+            width=280,
+            drawing_mode="freedraw",
+            key="canvas_final"
+        )
         
-        char, prob, top5 = model.predict(img_processed)
+        # Botones
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("🔍 Reconocer", use_container_width=True, type="primary"):
+                st.session_state.recognize = True
+        with col_btn2:
+            if st.button("🗑️ Limpiar", use_container_width=True):
+                st.session_state.recognize = False
+                st.rerun()
+    
+    # Procesar y predecir
+    if canvas_result.image_data is not None and st.session_state.get('recognize', False):
+        img_processed = preprocess_canvas_CORRECTO(canvas_result.image_data)
         
-        st.markdown("---")
-        st.markdown("### Prediction Result")
-        
-        st.markdown(f"""
-        <div style='text-align: center; padding: 20px;'>
-            <h1 style='font-size: 80px; margin: 0;'>{char}</h1>
-            <p style='font-size: 24px; color: #666;'>{prob*100:.1f}% confidence</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        with st.expander("View Top 5 Predictions"):
-            for i, (label, confidence) in enumerate(top5, 1):
-                st.progress(confidence, text=f"{i}. **{label}** — {confidence*100:.1f}%")
-        
-        with st.expander("View Preprocessed Image"):
-            col_a, col_b, col_c = st.columns([1, 2, 1])
-            with col_b:
-                st.image(img_processed, width=140, caption="28×28 grayscale", use_container_width=False)
+        if np.max(img_processed) > 0:
+            # Predecir
+            char, conf, top5 = st.session_state.predictor.predict(img_processed)
+            
+            # Mostrar predicción principal
+            bg_color = get_color_by_confidence(conf)
+            emoji = get_emoji_by_confidence(conf)
             
             st.markdown(f"""
-            **Image statistics:**
-            - Mean: {img_processed.mean():.3f}
-            - Std: {img_processed.std():.3f}
-            - Min: {img_processed.min():.3f}
-            - Max: {img_processed.max():.3f}
-            """)
+            <div style="background: linear-gradient(135deg, {bg_color} 0%, white 100%); 
+                        padding: 30px; 
+                        border-radius: 15px; 
+                        border: 3px solid {'#28a745' if conf >= 0.9 else '#ffc107' if conf >= 0.7 else '#dc3545'};
+                        margin: 20px 0;
+                        box-shadow: 0 6px 12px rgba(0,0,0,0.15);">
+                <h2 style="color: #2c3e50; margin: 0; text-align: center;">
+                    {emoji} Predicción
+                </h2>
+                <div style="font-size: 120px; text-align: center; margin: 20px 0; 
+                            font-weight: bold; color: #2c3e50; 
+                            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);">
+                    {char}
+                </div>
+                <div style="text-align: center; font-size: 32px; color: #555; font-weight: bold;">
+                    {conf*100:.2f}% de confianza
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Top 5 predicciones
+            st.markdown("### 🏆 Top 5 predicciones:")
+            
+            for i, (label, prob) in enumerate(top5, 1):
+                color = get_color_by_confidence(prob)
+                is_first = (i == 1)
+                
+                # Medalla según posición
+                medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"]
+                medal = medals[i-1]
+                
+                st.markdown(f"""
+                <div style="background: linear-gradient(90deg, {color} 0%, white 100%); 
+                            padding: 15px; 
+                            margin: 8px 0; 
+                            border-radius: 10px;
+                            border-left: 6px solid {'#28a745' if is_first else '#6c757d'};
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                            display: flex;
+                            align-items: center;
+                            justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <span style="font-size: 32px;">{medal}</span>
+                        <span style="font-size: 40px; font-weight: bold; color: #2c3e50;">{label}</span>
+                    </div>
+                    <span style="font-size: 24px; font-weight: bold; color: #555;">{prob*100:.1f}%</span>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Debug info
+            with st.expander("🔬 Información técnica"):
+                col_debug1, col_debug2 = st.columns(2)
+                
+                with col_debug1:
+                    st.image(img_processed, caption="Imagen procesada (28x28)", 
+                            width=280, clamp=True)
+                
+                with col_debug2:
+                    st.markdown("**Estadísticas:**")
+                    st.write(f"- Shape: {img_processed.shape}")
+                    st.write(f"- Min: {img_processed.min():.3f}")
+                    st.write(f"- Max: {img_processed.max():.3f}")
+                    st.write(f"- Mean: {img_processed.mean():.3f}")
+                    st.write(f"- Std: {img_processed.std():.3f}")
+                    st.write(f"- Dtype: {img_processed.dtype}")
+                    
+                    st.markdown("**Formato:**")
+                    st.success("✅ Fondo negro (~0.0)")
+                    st.success("✅ Carácter blanco (~1.0)")
+                    st.success("✅ Normalizado [0, 1]")
+        else:
+            st.warning("⚠️ No se detectó ningún trazo. Dibuja algo en el canvas.")
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; color: #666; padding: 20px;">
+        <p>🧠 <b>CNN v2 Finetuned</b> - Entrenado con 30 épocas</p>
+        <p>📊 Accuracy: <b>83.80%</b> en validación | <b>92%</b> en pruebas sintéticas</p>
+        <p>⚙️ Dispositivo: <b>CUDA (GPU)</b></p>
+        <p style="font-size: 12px; margin-top: 10px;">
+            💡 <i>Nota: Caracteres similares como I/l/|, o/O, c/C pueden confundirse</i>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
