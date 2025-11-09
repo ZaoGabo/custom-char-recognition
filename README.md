@@ -84,7 +84,7 @@ Input (1, 28, 28)
 Output (94 classes)
 ```
 
-**Parámetros totales**: ~2.3M  
+**Parámetros totales**: ~1.75M (1,747,102)  
 **Arquitectura**: 4 bloques conv + 4 capas fully connected  
 **Regularización**: Batch normalization + Dropout progresivo  
 **Optimizador**: Adam (lr=0.0001 en fine-tuning)
@@ -122,6 +122,17 @@ Parametros utiles:
 - `--epochs`: número de épocas (si no, usa `config.yml`)
 - `--device`: `cpu`, `cuda` o `mps`
 - `--no-force`: evita sobreescribir el modelo existente en `models/<model_dir_name>/`
+- `--patience`: early stopping tras N épocas sin mejora (default 8)
+- `--grad-clip`: clipping de gradientes (desactiva con 0)
+- `--scheduler`: `cosine`, `step_decay` o `none`
+- `--max-checkpoints`: número máximo de checkpoints rotativos
+- `--no-resume`: desactiva reanudación automática desde `checkpoints/last.pth`
+- `--num-workers`: workers adicionales para `DataLoader`
+
+Cada entrenamiento genera:
+- Checkpoints rotativos en `models/<model_dir_name>/checkpoints/`
+- Un historial consolidado en `models/<model_dir_name>/history.json`
+- Selección del mejor modelo según `val_acc` (fallback a `val_loss`/`loss_train`)
 
 ### Generar datos sintéticos de canvas
 
@@ -146,8 +157,8 @@ Puedes ajustar `--output-dir`, `--max-per-class` o `--skip-existing` según el e
 
 | Modelo | Arquitectura | Precisión | Parámetros |
 |--------|-------------|-----------|------------|
-| CNN v2 Finetuned | 4 Conv + 4 FC | 83.80% | 2.3M |
-| CNN v2 Base | 4 Conv + 4 FC | 77.92% | 2.3M |
+| CNN v2 Finetuned | 4 Conv + 4 FC | 83.80% | 1.75M |
+| CNN v2 Base | 4 Conv + 4 FC | 77.92% | 1.75M |
 | CNN v1 | 3 Conv + 3 FC | 77.22% | 434K |
 | MLP | 4 FC | 71.41% | 512K |
 
