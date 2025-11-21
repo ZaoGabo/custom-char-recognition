@@ -20,23 +20,35 @@ class CNNPredictor_v2_Finetuned:
         self.model_dir = Path(model_dir)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
+        # Try to load config, otherwise use defaults/inference
         config_path = self.model_dir / 'config_finetuned.json'
-        if not config_path.exists():
-            raise FileNotFoundError(f"Config not found: {config_path}")
-        
-        with open(config_path, 'r') as f:
-            self.config = json.load(f)
-        
-        num_classes = self.config['num_classes']
-        dropout_rate = self.config.get('dropout_rate', 0.5)
-        
-        self.model = CharCNN_v2(num_classes=num_classes, dropout_rate=dropout_rate)
-        
+        if config_path.exists():
+            with open(config_path, 'r') as f:
+                self.config = json.load(f)
+            num_classes = self.config['num_classes']
+            dropout_rate = self.config.get('dropout_rate', 0.5)
+        else:
+            print(f"⚠️ Config not found at {config_path}. Inferring from weights...")
+            self.config = {}
+            num_classes = None # Will infer later
+            dropout_rate = 0.5
+
         model_path = self.model_dir / 'best_model_finetuned.pth'
         if not model_path.exists():
             raise FileNotFoundError(f"Model weights not found: {model_path}")
         
         checkpoint = torch.load(model_path, map_location=self.device)
+        
+        # Infer num_classes if needed
+        if num_classes is None:
+            state_dict = checkpoint['model_state_dict'] if isinstance(checkpoint, dict) else checkpoint
+            if 'fc4.weight' in state_dict:
+                num_classes = state_dict['fc4.weight'].shape[0]
+                print(f"✅ Inferred num_classes: {num_classes}")
+            else:
+                raise ValueError("Could not infer num_classes from checkpoint")
+
+        self.model = CharCNN_v2(num_classes=num_classes, dropout_rate=dropout_rate)
         
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
             self.model.load_state_dict(checkpoint['model_state_dict'])
@@ -49,8 +61,6 @@ class CNNPredictor_v2_Finetuned:
         self.label_map = LabelMap(CUSTOM_LABELS)
         
         print(f"CNN v2 Finetuned loaded from {model_dir}")
-        print(f"  Validation accuracy: {self.config.get('best_val_acc', 0)*100:.2f}%")
-        print(f"  Epochs trained: {self.config.get('epochs_trained', 0)}")
         print(f"  Device: {self.device}")
     
     

@@ -10,8 +10,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import streamlit as st
 import numpy as np
+import requests
 from streamlit_drawable_canvas import st_canvas
 from PIL import Image
+
+API_URL = "http://127.0.0.1:8000"
 
 from src.cnn_predictor_v2_finetuned import cargar_cnn_predictor_v2_finetuned
 
@@ -140,11 +143,16 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Cargar modelo
-    if 'predictor' not in st.session_state:
-        with st.spinner('🔄 Cargando modelo CNN...'):
-            st.session_state.predictor = cargar_cnn_predictor_v2_finetuned()
-            st.success('✅ Modelo cargado correctamente')
+    # Configuración Sidebar
+    st.sidebar.title("⚙️ Configuración")
+    inference_mode = st.sidebar.radio("Modo de Inferencia", ["Local (PyTorch)", "API (ONNX)"])
+
+    # Cargar modelo solo si es local
+    if inference_mode == "Local (PyTorch)":
+        if 'predictor' not in st.session_state:
+            with st.spinner('🔄 Cargando modelo CNN...'):
+                st.session_state.predictor = cargar_cnn_predictor_v2_finetuned()
+                st.success('✅ Modelo cargado correctamente')
     
     # Layout en 3 columnas
     col_left, col_center, col_right = st.columns([1, 2, 1])
@@ -193,7 +201,25 @@ def main():
         
         if np.max(img_processed) > 0:
             # Predecir
-            char, conf, top5 = st.session_state.predictor.predict(img_processed)
+            if inference_mode == "Local (PyTorch)":
+                char, conf, top5 = st.session_state.predictor.predict(img_processed)
+            else:
+                # API Mode
+                try:
+                    payload = {"image": img_processed.flatten().tolist()}
+                    resp = requests.post(f"{API_URL}/predict", json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        char = data['character']
+                        conf = data['confidence']
+                        # Convert API top5 dict to list of tuples for UI
+                        top5 = [(item['character'], item['probability']) for item in data['top5']]
+                    else:
+                        st.error(f"Error API: {resp.status_code} - {resp.text}")
+                        return
+                except Exception as e:
+                    st.error(f"Error de conexión: {e}")
+                    return
             
             # Mostrar predicción principal
             bg_color = get_color_by_confidence(conf)

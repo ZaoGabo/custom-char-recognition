@@ -39,6 +39,13 @@ caracter, prob, top5 = predictor.predict(imagen)
 print(caracter, prob)
 ```
 
+### API REST (FastAPI)
+Para servir el modelo via HTTP (recomendado para producción):
+```bash
+uvicorn src.api.main:app --reload
+```
+Ver [docs/api_guide.md](docs/api_guide.md) para más detalles sobre la API y exportación ONNX.
+
 ## Arquitectura y metricas
 - 4 bloques convolucionales (32-64-128-256 filtros) con batch norm y dropout.
 - Capas totalmente conectadas (512-256-128-94) con dropout progresivo.
