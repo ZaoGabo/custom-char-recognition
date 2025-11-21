@@ -1,15 +1,12 @@
-# ==============================================================================
-# GITIGNORE PARA PROYECTO DE RED NEURONAL - RECONOCIMIENTO DE CARACTERES
-# ==============================================================================
-
-# -----------------------------------------------------------------------------
-# PYTHON
-# -----------------------------------------------------------------------------
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+env/
+venv/
+ENV/
 build/
 develop-eggs/
 dist/
@@ -25,421 +22,32 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
+# PyTorch
+*.pth
+*.pt
 
-# Virtual environments
-venv/
-ENV/
-env/
-.venv/
-.env
-venv.bak/
-env.bak/
-.venv_py314/
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
 
-# IDEs y Editores
+# IDEs
 .vscode/
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
 *~
-.spyderproject
-.spyproject
 
-# Sistema Operativo
+# OS
 .DS_Store
 Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-ehthumbs_vista.db
-*.stackdump
-[Dd]esktop.ini
-$RECYCLE.BIN/
-*~
-.fuse_hidden*
-.directory
-.Trash-*
-.nfs*
 
-# -----------------------------------------------------------------------------
-# MACHINE LEARNING / NEURAL NETWORKS
-# -----------------------------------------------------------------------------
-# Modelos entrenados (mantener estructura pero no archivos grandes)
-models/*.pkl
-models/*.h5
-models/*.pt
-models/*.pth
-models/*.onnx
-models/*.pb
-models/*.tflite
-models/*.joblib
-models/*.model
-models/*.weights
-
-# Archivos de pesos y parámetros de redes neuronales (NumPy)
-models/**/*.npy
-models/**/pesos_*.npy
-models/**/sesgos_*.npy
-models/**/gamma_*.npy
-models/**/beta_*.npy
-models/**/running_mean_*.npy
-models/**/running_var_*.npy
-models/**/arquitectura.json
-
-# Modelos temporales y checkpoints
-models/best_model_temp/
-models/modelo_entrenado/
-
-# Mantener estructura de carpetas
-!models/
-!models/.gitkeep
-!models/README.md
-
-# Checkpoints y logs de entrenamiento
-checkpoints/
-logs/
+# Project specific
+data/raw/
+data/processed/
 *.log
-runs/
-tensorboard_logs/
-wandb/
-mlruns/
+error.log
+compare_models.py
 
-# -----------------------------------------------------------------------------
-# DATOS DEL PROYECTO
-# -----------------------------------------------------------------------------
-# Mantener estructura de carpetas de caracteres pero no las imágenes
-data/A_upper/*.png
-data/A_upper/*.jpg
-data/A_upper/*.jpeg
-data/A_upper/*.bmp
-data/B_upper/*.png
-data/B_upper/*.jpg
-data/B_upper/*.jpeg
-data/B_upper/*.bmp
-data/C_upper/*.png
-data/C_upper/*.jpg
-data/C_upper/*.jpeg
-data/C_upper/*.bmp
-data/D_upper/*.png
-data/D_upper/*.jpg
-data/D_upper/*.jpeg
-data/D_upper/*.bmp
-data/E_upper/*.png
-data/E_upper/*.jpg
-data/E_upper/*.jpeg
-data/E_upper/*.bmp
-data/F_upper/*.png
-data/F_upper/*.jpg
-data/F_upper/*.jpeg
-data/F_upper/*.bmp
-data/G_upper/*.png
-data/G_upper/*.jpg
-data/G_upper/*.jpeg
-data/G_upper/*.bmp
-data/H_upper/*.png
-data/H_upper/*.jpg
-data/H_upper/*.jpeg
-data/H_upper/*.bmp
-data/I_upper/*.png
-data/I_upper/*.jpg
-data/I_upper/*.jpeg
-data/I_upper/*.bmp
-data/J_upper/*.png
-data/J_upper/*.jpg
-data/J_upper/*.jpeg
-data/J_upper/*.bmp
-data/K_upper/*.png
-data/K_upper/*.jpg
-data/K_upper/*.jpeg
-data/K_upper/*.bmp
-data/L_upper/*.png
-data/L_upper/*.jpg
-data/L_upper/*.jpeg
-data/L_upper/*.bmp
-data/M_upper/*.png
-data/M_upper/*.jpg
-data/M_upper/*.jpeg
-data/M_upper/*.bmp
-data/N_upper/*.png
-data/N_upper/*.jpg
-data/N_upper/*.jpeg
-data/N_upper/*.bmp
-data/O_upper/*.png
-data/O_upper/*.jpg
-data/O_upper/*.jpeg
-data/O_upper/*.bmp
-data/P_upper/*.png
-data/P_upper/*.jpg
-data/P_upper/*.jpeg
-data/P_upper/*.bmp
-data/Q_upper/*.png
-data/Q_upper/*.jpg
-data/Q_upper/*.jpeg
-data/Q_upper/*.bmp
-data/R_upper/*.png
-data/R_upper/*.jpg
-data/R_upper/*.jpeg
-data/R_upper/*.bmp
-data/S_upper/*.png
-data/S_upper/*.jpg
-data/S_upper/*.jpeg
-data/S_upper/*.bmp
-data/T_upper/*.png
-data/T_upper/*.jpg
-data/T_upper/*.jpeg
-data/T_upper/*.bmp
-data/U_upper/*.png
-data/U_upper/*.jpg
-data/U_upper/*.jpeg
-data/U_upper/*.bmp
-data/V_upper/*.png
-data/V_upper/*.jpg
-data/V_upper/*.jpeg
-data/V_upper/*.bmp
-data/W_upper/*.png
-data/W_upper/*.jpg
-data/W_upper/*.jpeg
-data/W_upper/*.bmp
-data/X_upper/*.png
-data/X_upper/*.jpg
-data/X_upper/*.jpeg
-data/X_upper/*.bmp
-data/Y_upper/*.png
-data/Y_upper/*.jpg
-data/Y_upper/*.jpeg
-data/Y_upper/*.bmp
-data/Z_upper/*.png
-data/Z_upper/*.jpg
-data/Z_upper/*.jpeg
-data/Z_upper/*.bmp
-
-# Carpetas de minúsculas
-data/a_lower/*.png
-data/a_lower/*.jpg
-data/a_lower/*.jpeg
-data/a_lower/*.bmp
-data/b_lower/*.png
-# Dataset sintético generado desde canvas
-data/canvas_synthetic/X_canvas.npy
-data/canvas_synthetic/y_canvas.npy
-data/canvas_synthetic/stats.json
-data/canvas_synthetic/samples/
-
-data/b_lower/*.jpg
-data/b_lower/*.jpeg
-data/b_lower/*.bmp
-data/c_lower/*.png
-data/c_lower/*.jpg
-data/c_lower/*.jpeg
-data/c_lower/*.bmp
-data/d_lower/*.png
-data/d_lower/*.jpg
-data/d_lower/*.jpeg
-data/d_lower/*.bmp
-data/e_lower/*.png
-data/e_lower/*.jpg
-data/e_lower/*.jpeg
-data/e_lower/*.bmp
-data/f_lower/*.png
-data/f_lower/*.jpg
-data/f_lower/*.jpeg
-data/f_lower/*.bmp
-data/g_lower/*.png
-data/g_lower/*.jpg
-data/g_lower/*.jpeg
-data/g_lower/*.bmp
-data/h_lower/*.png
-data/h_lower/*.jpg
-data/h_lower/*.jpeg
-data/h_lower/*.bmp
-data/i_lower/*.png
-data/i_lower/*.jpg
-data/i_lower/*.jpeg
-data/i_lower/*.bmp
-data/j_lower/*.png
-data/j_lower/*.jpg
-data/j_lower/*.jpeg
-data/j_lower/*.bmp
-data/k_lower/*.png
-data/k_lower/*.jpg
-data/k_lower/*.jpeg
-data/k_lower/*.bmp
-data/l_lower/*.png
-data/l_lower/*.jpg
-data/l_lower/*.jpeg
-data/l_lower/*.bmp
-data/m_lower/*.png
-data/m_lower/*.jpg
-data/m_lower/*.jpeg
-data/m_lower/*.bmp
-data/n_lower/*.png
-data/n_lower/*.jpg
-data/n_lower/*.jpeg
-data/n_lower/*.bmp
-data/o_lower/*.png
-data/o_lower/*.jpg
-data/o_lower/*.jpeg
-data/o_lower/*.bmp
-data/p_lower/*.png
-data/p_lower/*.jpg
-data/p_lower/*.jpeg
-data/p_lower/*.bmp
-data/q_lower/*.png
-data/q_lower/*.jpg
-data/q_lower/*.jpeg
-data/q_lower/*.bmp
-data/r_lower/*.png
-data/r_lower/*.jpg
-data/r_lower/*.jpeg
-data/r_lower/*.bmp
-data/s_lower/*.png
-data/s_lower/*.jpg
-data/s_lower/*.jpeg
-data/s_lower/*.bmp
-data/t_lower/*.png
-data/t_lower/*.jpg
-data/t_lower/*.jpeg
-data/t_lower/*.bmp
-data/u_lower/*.png
-data/u_lower/*.jpg
-data/u_lower/*.jpeg
-data/u_lower/*.bmp
-data/v_lower/*.png
-data/v_lower/*.jpg
-data/v_lower/*.jpeg
-data/v_lower/*.bmp
-data/w_lower/*.png
-data/w_lower/*.jpg
-data/w_lower/*.jpeg
-data/w_lower/*.bmp
-data/x_lower/*.png
-data/x_lower/*.jpg
-data/x_lower/*.jpeg
-data/x_lower/*.bmp
-data/y_lower/*.png
-data/y_lower/*.jpg
-data/y_lower/*.jpeg
-data/y_lower/*.bmp
-data/z_lower/*.png
-data/z_lower/*.jpg
-data/z_lower/*.jpeg
-data/z_lower/*.bmp
-
-# Mantener estructura de carpetas pero no contenido
-!data/
-!data/*/
-!data/*/.gitkeep
-
-# Otros archivos de datos
-data/raw/*
-!data/raw/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
-# Descargas de EMNIST (archivos .idx/.gz y estructura interna de torchvision)
-data/emnist_download/
-data/emnist_download/**
-*.csv
-*.json
-*.xlsx
-
-# -----------------------------------------------------------------------------
-# STREAMLIT
-# -----------------------------------------------------------------------------
+# Streamlit
 .streamlit/
-streamlit_app.log
-
-# -----------------------------------------------------------------------------
-# OUTPUT Y RESULTADOS
-# -----------------------------------------------------------------------------
-output/logs/*
-!output/logs/.gitkeep
-results/
-plots/
-figures/
-*.png
-*.jpg
-*.jpeg
-!demo/static/*
-!docs/images/*
-!README_images/*
-
-# -----------------------------------------------------------------------------
-# JUPYTER NOTEBOOKS
-# -----------------------------------------------------------------------------
-.ipynb_checkpoints/
-*.ipynb
-
-# -----------------------------------------------------------------------------
-# TESTING
-# -----------------------------------------------------------------------------
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-
-# -----------------------------------------------------------------------------
-# ARCHIVOS TEMPORALES DEL PROYECTO
-# -----------------------------------------------------------------------------
-# Scripts de entrenamiento temporales
-train_temp.py
-train_test.py
-test_model.py
-experiment_*.py
-debug_*.py
-recreate_model.py
-train_simple.py
-create_simple_model.py
-
-# Archivos obsoletos (movidos a carpeta obsoletos/)
-obsoletos/
-*.zip
-
-# Scripts de descarga de datasets (configuración local)
-src/scripts/descargar_kaggle_az.py
-INSTRUCCIONES_KAGGLE.md
-
-# Archivos de backup
-*.bak
-*.backup
-*.old
-*.orig
-
-# -----------------------------------------------------------------------------
-# ARCHIVOS DE CONFIGURACIÓN SENSIBLES
-# -----------------------------------------------------------------------------
-.env.local
-.env.production
-config.ini
-secrets.json
-credentials.json
-api_keys.txt
-
-# Kaggle API credentials
-.kaggle/
-kaggle.json
-~/.kaggle/kaggle.json
-
-# -----------------------------------------------------------------------------
-# MANTENER ARCHIVOS IMPORTANTES
-# -----------------------------------------------------------------------------
-!README.md
-!requirements.txt
-!LICENSE
-!.gitignore
-!setup.py
-!pyproject.toml
-!environment.yml
