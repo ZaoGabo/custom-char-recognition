@@ -21,11 +21,44 @@ try:
 except ImportError:
     train_test_split = None
 
-from .config import DATA_CONFIG
+from .config import DATA_CONFIG, ADVANCED_AUGMENTATION_CONFIG
 from .label_map import LabelMap, DEFAULT_LABEL_MAP
 from .utils import apply_augmentation, normalize_image
 
+import albumentations as A
+
+def get_training_augmentation():
+    """Create albumentations pipeline from config."""
+    cfg = ADVANCED_AUGMENTATION_CONFIG
+    if not cfg.get('enable', False):
+        return None
+        
+    transforms = []
+    
+    if 'elastic_transform' in cfg:
+        transforms.append(A.ElasticTransform(**cfg['elastic_transform']))
+        
+    if 'grid_distortion' in cfg:
+        transforms.append(A.GridDistortion(**cfg['grid_distortion']))
+        
+    if 'affine' in cfg:
+        transforms.append(A.Affine(**cfg['affine']))
+        
+    if 'gauss_noise' in cfg:
+        transforms.append(A.GaussNoise(**cfg['gauss_noise']))
+        
+    if 'coarse_dropout' in cfg:
+        transforms.append(A.CoarseDropout(**cfg['coarse_dropout']))
+        
+    if 'random_brightness_contrast' in cfg:
+        transforms.append(A.RandomBrightnessContrast(**cfg['random_brightness_contrast']))
+
+    return A.Compose(transforms)
+
+_albumentations_pipeline = get_training_augmentation()
+
 CV2_IMREAD_GRAYSCALE = getattr(cv2, "IMREAD_GRAYSCALE", 0) if cv2 is not None else 0
+
 
 
 def _leer_imagen_gris(ruta_imagen: str, tamano: Tuple[int, int]) -> np.ndarray:
@@ -201,7 +234,20 @@ class DataLoader:
                 for i in indices_lote:
                     try:
                         imagen = _leer_imagen_gris(rutas_imagenes[i], tamano_imagen)
-                        if augment and DATA_CONFIG.get('usar_augmentacion'):
+                        
+                        # Apply Albumentations if enabled and in training mode (augment=True)
+                        if augment and _albumentations_pipeline is not None:
+                            # Albumentations expects image in (H, W) or (H, W, C) uint8
+                            # Ensure it's a contiguous numpy array with uint8 dtype
+                            if not isinstance(imagen, np.ndarray):
+                                imagen = np.array(imagen, dtype=np.uint8)
+                            else:
+                                imagen = np.ascontiguousarray(imagen, dtype=np.uint8)
+                            
+                            augmented = _albumentations_pipeline(image=imagen)['image']
+                            imagen = augmented
+                        elif augment and DATA_CONFIG.get('usar_augmentacion'):
+                            # Fallback to legacy augmentation if albumentations not configured but legacy is
                             imagen = apply_augmentation(imagen)
                         
                         lote_X.append(imagen)

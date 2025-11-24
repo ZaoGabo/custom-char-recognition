@@ -28,7 +28,7 @@ lr_scheduler_config:
 # Configuracion de datos
 data_config:
   tamano_imagen: [28, 28]
-  usar_augmentacion: true  # REACTIVADO para mejor generalización
+  usar_augmentacion: false  # Disabled - using albumentations instead
   semilla: 42
 
 # Configuracion de aumento de datos (MUY AGRESIVO - simula escritura a mano real)
@@ -44,38 +44,32 @@ augmentation_config:
 
 # Configuracion de augmentacion avanzada con Albumentations
 advanced_augmentation:
-  enable: true
+  enable: false  # Temporarily disabled to test GPU training
   elastic_transform:
-    alpha: 40.0
-    sigma: 6.0
     p: 0.35
-    fill: 0
   grid_distortion:
     distort_limit: 0.25
-    num_steps: 5
     p: 0.2
-    fill: 0
   affine:
     translate_percent: 0.08
-    scale_limit: 0.15
-    rotate_limit: 15
-    shear_limit: 0
+    scale: 0.15
+    rotate: 15
+    shear: 0
     p: 0.5
-    fill: 0
   random_brightness_contrast:
     brightness_limit: 0.2
     contrast_limit: 0.2
     p: 0.3
   gauss_noise:
-    std_range: [2.3, 5.0]
-    mean_range: [0.0, 0.0]
+    var_limit: [5.3, 25.0]
+    mean: 0
     per_channel: true
     p: 0.25
   coarse_dropout:
     num_holes_range: [1, 1]
     hole_height_range: [1, 6]
     hole_width_range: [1, 6]
-    fill: 0
+    fill_value: 0
     p: 0.15
 
 # Rutas del proyecto

@@ -4,8 +4,9 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
+.venv/
 venv/
+env/
 ENV/
 build/
 develop-eggs/
@@ -23,13 +24,34 @@ wheels/
 .installed.cfg
 *.egg
 
-# PyTorch
+# Models (archivos binarios grandes)
 *.pth
 *.pt
+*.onnx
+models/*/best_*.pth
+models/*/model.onnx
+
+# Data (NO subir datasets grandes)
+data/raw/**/*.png
+data/raw/**/*.jpg
+data/processed/
+*.csv
+!data/README.md
+!requirements*.txt
+
+# Logs
+logs/
+*.log
+error.log
 
 # Jupyter Notebook
-.ipynb_checkpoints
-*.ipynb
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Environment
+.env
+.env.local
+.env.*.local
 
 # IDEs
 .vscode/
@@ -41,13 +63,30 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Project specific
-data/raw/
-data/processed/
-*.log
-error.log
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.hypothesis/
+
+# Temporary/Debug files
+tmp/
+temp/
+debug_*.py
+test_imports.py
 compare_models.py
+confusion_report.csv
+payload.json
+generate_json.py
+check_gpu.py
 
 # Streamlit
-.streamlit/
+.streamlit/secrets.toml
+.streamlit/config.toml
+
+# Docker
+*.log
+docker-compose.override.yml

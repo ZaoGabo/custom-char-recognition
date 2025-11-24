@@ -1,6 +1,6 @@
 """
-App Final - CNN v2 Finetuned con preprocesamiento CORRECTO
-92% de accuracy en caracteres generados
+App Final - CNN v3 con preprocesamiento CORRECTO
+Entrenado en Colab con EMNIST
 """
 import sys
 from pathlib import Path
@@ -11,12 +11,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import streamlit as st
 import numpy as np
 import requests
+import os
 from streamlit_drawable_canvas import st_canvas
 from PIL import Image
 
-API_URL = "http://127.0.0.1:8000"
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
-from src.cnn_predictor_v2_finetuned import cargar_cnn_predictor_v2_finetuned
+from src.cnn_predictor_v3 import cargar_cnn_predictor_v3
 
 
 def preprocess_canvas_CORRECTO(canvas_data: np.ndarray) -> np.ndarray:
@@ -135,10 +136,10 @@ def main():
             ✍️ Reconocimiento de Caracteres
         </h1>
         <p style="color: white; text-align: center; font-size: 20px; margin: 10px 0 0 0;">
-            CNN v2 Finetuned - 92% Accuracy 🎯
+            CNN v3 ResNet - Entrenado en Colab 🎯
         </p>
         <p style="color: rgba(255,255,255,0.8); text-align: center; font-size: 16px; margin: 5px 0 0 0;">
-            A-Z, a-z, 0-9 + símbolos especiales (94 clases)
+            A-Z, a-z, 0-9 (62 clases EMNIST)
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -151,7 +152,7 @@ def main():
     if inference_mode == "Local (PyTorch)":
         if 'predictor' not in st.session_state:
             with st.spinner('🔄 Cargando modelo CNN...'):
-                st.session_state.predictor = cargar_cnn_predictor_v2_finetuned()
+                st.session_state.predictor = cargar_cnn_predictor_v3()
                 st.success('✅ Modelo cargado correctamente')
     
     # Layout en 3 columnas

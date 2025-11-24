@@ -1,0 +1,7 @@
+{
+    "num_classes": 62,
+    "dropout_rate": 0.3,
+    "model_version": "v3_colab",
+    "best_test_acc": 85.44,
+    "epochs_trained": 15
+}
