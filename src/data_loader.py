@@ -23,7 +23,7 @@ except ImportError:
 
 from .config import DATA_CONFIG, ADVANCED_AUGMENTATION_CONFIG
 from .label_map import LabelMap, DEFAULT_LABEL_MAP
-from .utils import apply_augmentation, normalize_image
+from src.image_utils import apply_augmentation, normalize_image
 
 import albumentations as A
 

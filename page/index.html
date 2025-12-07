@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html class="dark" lang="es">
+
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Selección de Modelo de Reconocimiento</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com" rel="preconnect" />
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+    rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+    rel="stylesheet" />
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#135bec",
+            "background-light": "#f6f6f8",
+            "background-dark": "#101622",
+          },
+          fontFamily: {
+            "display": ["Inter", "sans-serif"]
+          },
+          borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+        },
+      },
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+    }
+  </style>
+</head>
+
+<body class="font-display bg-background-light dark:bg-background-dark">
+  <div class="relative flex min-h-screen w-full flex-col items-center justify-center p-4 sm:p-6 md:p-8">
+    <div class="w-full max-w-5xl">
+      <!-- PageHeading -->
+      <div class="mb-8 text-center">
+        <h1 class="text-3xl font-black tracking-tighter text-slate-800 dark:text-white sm:text-4xl">Selección de Modelo
+          de Reconocimiento</h1>
+        <p class="mt-2 text-base text-slate-600 dark:text-slate-400">Compare y elija el modelo que mejor se adapte a sus
+          necesidades de reconocimiento de caracteres.</p>
+      </div>
+      <!-- PricingCards -->
+      <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <!-- Card 1: v3_super -->
+        <div
+          class="flex flex-col gap-6 rounded-xl border border-slate-200 bg-white p-6 ring-2 ring-primary dark:border-slate-800 dark:bg-slate-900/50">
+          <div class="flex items-start justify-between">
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white">v3_super</h2>
+            <span
+              class="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold leading-normal text-primary">Recomendado</span>
+          </div>
+          <div class="flex flex-col gap-4">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-primary">check_circle</span>
+              <p class="text-sm text-slate-600 dark:text-slate-300"><b>Mejor para:</b> Texto en condiciones de baja luz,
+                diversidad de fuentes tipográficas, documentos escaneados con ruido.</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-primary">check_circle</span>
+              <p class="text-sm text-slate-600 dark:text-slate-300"><b>Casos de uso:</b> Digitalización de facturas
+                antiguas, extracción de datos de formularios complejos.</p>
+            </div>
+          </div>
+          <button id="btnV3Super"
+            class="mt-auto flex w-full cursor-pointer items-center justify-center rounded-lg bg-primary h-10 px-4 text-sm font-bold text-white transition-colors hover:bg-primary/90">
+            <span>Seleccionar y Continuar</span>
+          </button>
+        </div>
+        <!-- Card 2: v2_finetuned -->
+        <div
+          class="flex flex-col gap-6 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900/50">
+          <div class="flex items-start justify-between">
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white">v2_finetuned</h2>
+            <span
+              class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold leading-normal text-slate-600 dark:bg-slate-800 dark:text-slate-300">Más
+              Rápido</span>
+          </div>
+          <div class="flex flex-col gap-4">
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-slate-500 dark:text-slate-400">speed</span>
+              <p class="text-sm text-slate-600 dark:text-slate-300"><b>Mejor para:</b> Procesamiento en tiempo real,
+                textos con un formato muy específico, bajo consumo de recursos.</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="material-symbols-outlined text-slate-500 dark:text-slate-400">speed</span>
+              <p class="text-sm text-slate-600 dark:text-slate-300"><b>Casos de uso:</b> Lectura de matrículas en video,
+                reconocimiento de números de serie.</p>
+            </div>
+          </div>
+          <button id="btnV2Finetuned"
+            class="mt-auto flex w-full cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white h-10 px-4 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
+            <span>Usar este Modelo</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      document.getElementById('btnV3Super')?.addEventListener('click', function () {
+        window.location.href = '/v3';
+      });
+      document.getElementById('btnV2Finetuned')?.addEventListener('click', function () {
+        window.location.href = '/v2';
+      });
+    });
+  </script>
+</body>
+
+</html>

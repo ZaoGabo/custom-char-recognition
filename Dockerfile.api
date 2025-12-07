@@ -10,13 +10,15 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements first to leverage cache
-COPY requirements.txt .
+COPY requirements-docker.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code and models
 COPY src/ src/
 COPY models/ models/
+COPY page/ page/
 COPY config.yml .
+COPY .env .
 
 # Expose API port
 EXPOSE 8000

@@ -1,0 +1,9 @@
+{
+    "num_classes": 62,
+    "dropout_rate": 0.4,
+    "model_version": "v3_super",
+    "best_test_acc": 88.74685143952615,
+    "epochs_trained": 30,
+    "architecture": "ResNet-SUPER (8 blocks)",
+    "parameters": 11314942
+}

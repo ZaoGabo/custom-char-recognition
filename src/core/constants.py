@@ -37,6 +37,7 @@ MODELS_DIR = "models"
 MODEL_PATHS = {
     ModelVersion.V2_FINETUNED: f"{MODELS_DIR}/cnn_modelo_v2_finetuned",
     ModelVersion.V3: f"{MODELS_DIR}/cnn_modelo_v3",
+    ModelVersion.V3_SUPER: f"{MODELS_DIR}/cnn_modelo_v3_super",
 }
 
 # Configuración de logging

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Interfaz v2_finetuned: Reconocimiento de Trazos Digitales</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
+    rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+    rel="stylesheet" />
+  <script src="v2_finetuned.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#135bec",
+            "background-light": "#f6f6f8",
+            "background-dark": "#101622",
+          },
+          fontFamily: {
+            "display": ["Inter", "sans-serif"]
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings:
+        'FILL' 0,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 24
+    }
+  </style>
+</head>
+
+<body class="font-display bg-background-light dark:bg-background-dark">
+  <div class="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
+    <div class="layout-container flex h-full grow flex-col">
+      <div class="flex flex-1 justify-center py-5 px-4 sm:px-8 md:px-12 lg:px-16">
+        <div class="layout-content-container flex flex-col w-full max-w-7xl flex-1">
+          <header
+            class="flex flex-wrap items-center justify-between gap-4 whitespace-nowrap border-b border-solid border-white/10 px-4 py-4">
+            <div class="flex items-center gap-4 text-white">
+              <div class="size-6 text-primary">
+                <svg fill="none" viewbox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M36.7273 44C33.9891 44 31.6043 39.8386 30.3636 33.69C29.123 39.8386 26.7382 44 24 44C21.2618 44 18.877 39.8386 17.6364 33.69C16.3957 39.8386 14.0109 44 11.2727 44C7.25611 44 4 35.0457 4 24C4 12.9543 7.25611 4 11.2727 4C14.0109 4 16.3957 8.16144 17.6364 14.31C18.877 8.16144 21.2618 4 24 4C26.7382 4 29.123 8.16144 30.3636 14.31C31.6043 8.16144 33.9891 4 36.7273 4C40.7439 4 44 12.9543 44 24C44 35.0457 40.7439 44 36.7273 44Z"
+                    fill="currentColor"></path>
+                </svg>
+              </div>
+              <div class="flex flex-col">
+                <h2 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Interfaz v2_finetuned</h2>
+                <p class="text-xs text-slate-400">Reconocimiento de Trazos Digitales</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+              <span class="text-sm text-slate-300">Model Online</span>
+            </div>
+          </header>
+          <main class="grid flex-1 grid-cols-1 gap-8 p-4 md:grid-cols-3 lg:gap-12">
+            <div class="flex flex-col gap-4 md:col-span-2">
+              <div
+                class="flex flex-col items-center justify-center gap-6 rounded-lg border-2 border-dashed border-slate-700 p-6 flex-1 bg-slate-900/50"
+                style="background-image: linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px); background-size: 20px 20px;">
+                <div class="flex max-w-[480px] flex-col items-center gap-2 text-center">
+                  <p class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Draw here...</p>
+                  <p class="text-slate-400 text-sm font-normal leading-normal">Use your mouse or a digital pen to write
+                    a character.</p>
+                </div>
+              </div>
+              <div
+                class="flex flex-wrap items-center justify-center gap-4 rounded-lg border border-slate-800 bg-slate-900/30 p-3">
+                <div class="flex items-center gap-2">
+                  <button id="undoBtn"
+                    class="flex items-center justify-center rounded-md p-2 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">
+                    <span class="material-symbols-outlined">undo</span>
+                  </button>
+                  <button id="deleteBtn"
+                    class="flex items-center justify-center rounded-md p-2 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">
+                    <span class="material-symbols-outlined">delete</span>
+                  </button>
+                </div>
+                <div class="h-6 w-px bg-slate-700"></div>
+                <div class="flex items-center gap-2">
+                  <button id="editBtn"
+                    class="flex items-center justify-center rounded-md p-2 text-white bg-primary/20 ring-1 ring-primary">
+                    <span class="material-symbols-outlined">edit</span>
+                  </button>
+                  <button id="eraserBtn"
+                    class="flex items-center justify-center rounded-md p-2 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors">
+                    <span class="material-symbols-outlined">ink_eraser</span>
+                  </button>
+                </div>
+                <div class="h-6 w-px bg-slate-700"></div>
+                <div class="flex items-center gap-3 text-slate-300">
+                  <span class="material-symbols-outlined text-base">line_weight</span>
+                  <input id="lineWeightRange"
+                    class="w-24 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary" max="10"
+                    min="1" type="range" value="3" />
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-col gap-6 md:col-span-1">
+              <button id="recognizeBtn"
+                class="flex w-full min-w-[84px] cursor-pointer items-center justify-center gap-2 overflow-hidden rounded-lg h-12 px-4 bg-primary text-white text-base font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors">
+                <span class="material-symbols-outlined">psychology</span>
+                <span class="truncate">Reconocer</span>
+              </button>
+              <div class="flex flex-col gap-4 rounded-lg border border-slate-800 bg-slate-900/30 p-4">
+                <h3 class="text-white text-lg font-bold leading-tight tracking-[-0.015em]">Resultado</h3>
+                <div id="resultContainer"
+                  class="flex flex-col items-center justify-center gap-4 rounded-md bg-slate-900 p-6 text-center">
+                  <p class="text-slate-400">Dibuja un caracter para reconocerlo</p>
+                </div>
+                <div id="confidenceContainer" class="flex flex-col gap-2" style="display: none;">
+                  <div class="flex justify-between text-sm">
+                    <span class="text-slate-300">Confianza</span>
+                    <span id="confidenceScore" class="font-semibold text-white">0%</span>
+                  </div>
+                  <div class="w-full bg-slate-700 rounded-full h-2">
+                    <div id="confidenceBar" class="bg-green-500 h-2 rounded-full" style="width: 0%"></div>
+                  </div>
+                </div>
+              </div>
+              <div id="altPredictionsContainer"
+                class="flex flex-col gap-3 rounded-lg border border-slate-800 bg-slate-900/30 p-4"
+                style="display: none;">
+                <h3 class="text-white text-base font-bold">Predicciones Alternativas</h3>
+                <ul id="altPredictions" class="space-y-2">
+                </ul>
+              </div>
+              <div class="flex flex-col gap-3 text-xs text-slate-500 border-t border-slate-800 pt-4 mt-auto">
+                <div class="flex justify-between">
+                  <span>Modelo:</span>
+                  <span class="font-mono">v2_finetuned</span>
+                </div>
+                <div class="flex justify-between">
+                  <span>Uso:</span>
+                  <span class="font-mono">Canvas Digital</span>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

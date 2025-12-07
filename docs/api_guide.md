@@ -1,53 +1,90 @@
-# Guía de API y Optimización ONNX
+# Guía de API REST
 
-Esta guía documenta cómo utilizar la API REST de reconocimiento de caracteres y el proceso de exportación a ONNX.
+Esta documentación detalla los endpoints disponibles en la API de reconocimiento de caracteres.
 
-## 🚀 Resumen
-El proyecto incluye una fase de optimización que consiste en:
-1.  **Optimización**: Exportación del modelo PyTorch a **ONNX** (`models/cnn_modelo_v2_finetuned/model.onnx`).
-2.  **API**: Servicio REST con **FastAPI** (`src/api/main.py`) para inferencia eficiente.
+##  Inicio Rápido
 
-## 🛠️ Cómo ejecutar la API
+1.  **Iniciar Servidor**:
+    ```bash
+    python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+    ```
+2.  **Documentación Interactiva (Swagger)**:
+    -   Acceder a [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### 1. Iniciar el servidor
-```bash
-uvicorn src.api.main:app --reload
-```
-La API estará disponible en `http://localhost:8000`.
+---
 
-### 2. Documentación Interactiva
-Abre tu navegador en `http://localhost:8000/docs` para ver la interfaz Swagger UI, donde puedes probar los endpoints directamente.
+##  Endpoints Principales
 
-### 3. Probar Predicción (Ejemplo con cURL)
-```bash
-curl -X POST "http://localhost:8000/predict" \
-     -H "Content-Type: application/json" \
-     -d '{"image": [0.0, 0.0, ...]}' # Array de 784 floats (imagen 28x28 aplanada)
-```
+### 1. Predicción desde Canvas (v2)
+Optimizado para trazos dibujados a mano en la interfaz web.
 
-## 📦 Exportación a ONNX
+-   **URL**: `/api/v2/predict`
+-   **Método**: `POST`
+-   **Entrada**:
+    ```json
+    {
+      "image": [0.0, ..., 1.0],  // Array de 784 floats (28x28 normalizado)
+      "width": 28,
+      "height": 28
+    }
+    ```
+-   **Respuesta**:
+    ```json
+    {
+      "character": "A",
+      "confidence": 0.98,
+      "top5": [
+        {"character": "A", "probability": 0.98},
+        {"character": "a", "probability": 0.01},
+        ...
+      ]
+    }
+    ```
 
-Si reentrenas el modelo y necesitas actualizar la versión ONNX, utiliza el script de exportación:
+### 2. Predicción de Documentos (v3)
+Optimizado para caracteres extraídos de documentos escaneados.
 
-```bash
-python scripts/export_onnx.py
-```
+-   **URL**: `/api/v3/predict`
+-   **Método**: `POST`
+-   **Entrada**: Mismo formato que v2.
+-   **Respuesta**: Mismo formato que v2.
 
-Este script:
-1. Carga el último checkpoint (`best_model_finetuned.pth`).
-2. Infiere la configuración del modelo.
-3. Exporta a `models/cnn_modelo_v2_finetuned/model.onnx`.
-4. Verifica numéricamente que la salida coincida con PyTorch.
+### 3. Reconocimiento de Texto TrOCR (v4)
+Reconocimiento de líneas completas de texto usando Transformers.
 
-## 🧪 Tests de Integración
+-   **URL**: `/api/v4/predict_text`
+-   **Método**: `POST`
+-   **Entrada**:
+    ```json
+    {
+      "image_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+    }
+    ```
+-   **Respuesta**:
+    ```json
+    {
+      "text": "Hola Mundo",
+      "confidence": 0.95
+    }
+    ```
 
-Para verificar que la API funciona correctamente (Health check + Predicción):
+---
 
-```bash
-python tests/test_api_integration.py
-```
+##  Estado del Sistema
 
-## 📂 Archivos Clave
-- `scripts/export_onnx.py`: Script de conversión a ONNX.
-- `src/api/main.py`: Aplicación FastAPI.
-- `src/api/schemas.py`: Modelos de datos Pydantic.
+### Health Check
+Verifica que los modelos estén cargados en memoria.
+
+-   **URL**: `/health`
+-   **Método**: `GET`
+-   **Respuesta**:
+    ```json
+    {
+      "status": "healthy",
+      "models": {
+        "v2_finetuned": "loaded",
+        "v3_super": "loaded",
+        "trocr": "loaded"
+      }
+    }
+    ```
